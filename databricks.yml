@@ -1,0 +1,33 @@
+bundle:
+  name: finops-cloud-data-platform
+
+include:
+  - resources/*.yml
+
+artifacts:
+  default:
+    type: whl
+    build: uv build --wheel
+    dynamic_version: true
+    path: .
+
+variables:
+  environment:
+    description: Logical configuration target
+    default: dev
+
+targets:
+  dev:
+    mode: development
+    default: true
+    workspace:
+      profile: finops-gcp-dev
+    variables:
+      environment: dev
+
+  prod:
+    mode: production
+    workspace:
+      profile: finops-prod
+    variables:
+      environment: prod

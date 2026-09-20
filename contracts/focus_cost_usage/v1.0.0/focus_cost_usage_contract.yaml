@@ -1,0 +1,634 @@
+contract:
+  name: focus_cost_usage
+  version: 1.0.0
+  owner: PFE FinOps Data Platform
+  source_system: Azure FOCUS anonymized samples
+  focus_version: "1.0"
+  description: >
+    Data contract for Azure FOCUS cost and usage records used by the
+    synthetic generator, Bronze ingestion and downstream FinOps platform.
+
+compatibility:
+  allow_additional_fields: true
+  allow_missing_required_fields: false
+  allow_type_change: false
+
+quality_rules:
+  - name: billing_currency_eur
+    field: BillingCurrency
+    rule: allowed_values
+    values: [EUR]
+    severity: error
+  - name: provider_microsoft
+    field: ProviderName
+    rule: allowed_values
+    values: [Microsoft]
+    severity: error
+  - name: charge_period_order
+    rule: expression
+    expression: ChargePeriodStart <= ChargePeriodEnd
+    severity: error
+  - name: billing_period_order
+    rule: expression
+    expression: BillingPeriodStart <= BillingPeriodEnd
+    severity: error
+  - name: billed_cost_not_null
+    field: BilledCost
+    rule: not_null
+    severity: error
+
+fields:
+  - name: BilledCost
+    source_type: "double"
+    type: decimal
+    required: true
+    nullable: false
+    description: >
+      Cost invoiced in the billing currency.
+    allow_negative: true
+    note: Negative values may represent credits, refunds or adjustments.
+
+  - name: BillingAccountId
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: BillingAccountName
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: BillingAccountType
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: BillingCurrency
+    source_type: "large_string"
+    type: string
+    required: true
+    nullable: false
+    description: >
+      Currency used for billing.
+    allowed_values: [EUR]
+
+  - name: BillingPeriodEnd
+    source_type: "large_string"
+    type: string
+    required: true
+    nullable: false
+    description: >
+      End date of the billing period.
+
+  - name: BillingPeriodStart
+    source_type: "large_string"
+    type: string
+    required: true
+    nullable: false
+    description: >
+      Start date of the billing period.
+
+  - name: ChargeCategory
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: ChargeDescription
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: ChargeFrequency
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: ChargePeriodEnd
+    source_type: "large_string"
+    type: string
+    required: true
+    nullable: false
+    description: >
+      End timestamp of the charge period.
+
+  - name: ChargePeriodStart
+    source_type: "large_string"
+    type: string
+    required: true
+    nullable: false
+    description: >
+      Start timestamp of the charge period.
+
+  - name: CommitmentDiscountCategory
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+    description: >
+      Category of commitment discount, such as Usage or Spend.
+
+  - name: CommitmentDiscountId
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+    description: >
+      Identifier of the Reservation, Savings Plan or other commitment discount when applicable.
+
+  - name: CommitmentDiscountName
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: CommitmentDiscountType
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+    description: >
+      Type of commitment discount, such as Reservation or Savings Plan.
+
+  - name: EffectiveCost
+    source_type: "double"
+    type: decimal
+    required: false
+    nullable: false
+    description: >
+      Cost after discounts and commitment benefits when applicable.
+    allow_negative: true
+    note: Negative values may represent credits, refunds or adjustments.
+
+  - name: InvoiceIssuerName
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: ListCost
+    source_type: "double"
+    type: decimal
+    required: false
+    nullable: false
+    description: >
+      Cost calculated using public or list pricing where available.
+    allow_negative: true
+    note: Negative values may represent credits, refunds or adjustments.
+
+  - name: ListUnitPrice
+    source_type: "double"
+    type: decimal
+    required: false
+    nullable: true
+
+  - name: PricingCategory
+    source_type: "large_string"
+    type: string
+    required: true
+    nullable: false
+    description: >
+      Pricing model category such as On-Demand or Commitment-Based.
+    allowed_values: [On-Demand, Commitment-Based, Dynamic]
+
+  - name: PricingQuantity
+    source_type: "double"
+    type: decimal
+    required: false
+    nullable: true
+
+  - name: PricingUnit
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: ProviderName
+    source_type: "large_string"
+    type: string
+    required: true
+    nullable: false
+    description: >
+      Cloud provider or technology provider name.
+    allowed_values: [Microsoft]
+
+  - name: PublisherName
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: Region
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+    description: >
+      Geographic region of the consumed service.
+
+  - name: ResourceId
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+    description: >
+      Cloud resource identifier when the charge can be attributed to a resource.
+
+  - name: ResourceName
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+    description: >
+      Cloud resource name when available.
+
+  - name: ResourceType
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+    description: >
+      Cloud resource type when available.
+
+  - name: ServiceCategory
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: ServiceName
+    source_type: "large_string"
+    type: string
+    required: true
+    nullable: false
+    description: >
+      Cloud service associated with the charge.
+
+  - name: SkuId
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: SkuPriceId
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: SubAccountId
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: SubAccountName
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: SubAccountType
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: Tags
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+    description: >
+      Raw serialized tags attached to the resource or charge.
+
+  - name: ConsumedQuantity
+    source_type: "double"
+    type: decimal
+    required: false
+    nullable: true
+
+  - name: ConsumedUnit
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: x_AccountName
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: x_AccountOwnerId
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: x_BilledCostInUsd
+    source_type: "double"
+    type: decimal
+    required: false
+    nullable: true
+
+  - name: x_BilledUnitPrice
+    source_type: "double"
+    type: decimal
+    required: false
+    nullable: true
+
+  - name: x_BillingAccountId
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: x_BillingAccountName
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: x_BillingExchangeRate
+    source_type: "double"
+    type: decimal
+    required: false
+    nullable: true
+
+  - name: x_BillingExchangeRateDate
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: x_BillingProfileId
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: x_BillingProfileName
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: x_CostAllocationRuleName
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: x_CostCenter
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: x_CustomerId
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: x_CustomerName
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: x_EffectiveCostInUsd
+    source_type: "double"
+    type: decimal
+    required: false
+    nullable: true
+
+  - name: x_EffectiveUnitPrice
+    source_type: "double"
+    type: decimal
+    required: false
+    nullable: true
+
+  - name: x_InvoiceId
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: x_InvoiceIssuerId
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: x_InvoiceSectionId
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: x_InvoiceSectionName
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: ContractedCost
+    source_type: "double"
+    type: decimal
+    required: false
+    nullable: true
+    allow_negative: true
+    note: Negative values may represent credits, refunds or adjustments.
+
+  - name: x_ContractedCostInUsd
+    source_type: "double"
+    type: decimal
+    required: false
+    nullable: true
+
+  - name: ContractedUnitPrice
+    source_type: "double"
+    type: decimal
+    required: false
+    nullable: true
+
+  - name: x_PartnerCreditApplied
+    source_type: "int64"
+    type: integer
+    required: false
+    nullable: true
+
+  - name: x_PartnerCreditRate
+    source_type: "double"
+    type: decimal
+    required: false
+    nullable: true
+
+  - name: x_PricingBlockSize
+    source_type: "double"
+    type: decimal
+    required: false
+    nullable: true
+
+  - name: x_PricingCurrency
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: x_PricingSubcategory
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: x_PricingUnitDescription
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: x_PublisherCategory
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: x_PublisherId
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: x_ResellerId
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: x_ResellerName
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: x_ResourceGroupName
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: x_ResourceType
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: x_ServicePeriodEnd
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: x_ServicePeriodStart
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: x_SkuDescription
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: x_SkuDetails
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: x_SkuIsCreditEligible
+    source_type: "bool"
+    type: boolean
+    required: false
+    nullable: true
+
+  - name: x_SkuMeterCategory
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: x_SkuMeterId
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: x_SkuMeterName
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: x_SkuMeterSubcategory
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: x_SkuOfferId
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: x_SkuOrderId
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: x_SkuOrderName
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: x_SkuPartNumber
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: x_SkuRegion
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: x_SkuServiceFamily
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: x_SkuTerm
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true
+
+  - name: x_SkuTier
+    source_type: "large_string"
+    type: string
+    required: false
+    nullable: true

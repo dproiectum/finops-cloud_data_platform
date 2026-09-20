@@ -1,0 +1,120 @@
+"""Render and execute packaged Databricks SQL templates.
+
+SQL owns the physical Gold/datamart model. Python only supplies trusted table
+identifiers from TOML configuration and controls execution order.
+"""
+
+from __future__ import annotations
+
+from importlib.metadata import PackageNotFoundError, distribution
+import os
+from pathlib import Path
+import re
+from string import Formatter
+from typing import Mapping
+
+
+_SAFE_IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*){0,2}$")
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _installed_sql_path(relative_path: Path) -> Path | None:
+    """Locate SQL data embedded in an installed wheel."""
+    try:
+        package = distribution("finops_cloud")
+    except PackageNotFoundError:
+        return None
+    expected = ("share", "finops_cloud", "sql", *relative_path.parts)
+    for entry in package.files or ():
+        if tuple(entry.parts[-len(expected) :]) == expected:
+            candidate = Path(package.locate_file(entry))
+            if candidate.is_file():
+                return candidate
+    return None
+
+
+def sql_text(relative_path: str) -> str:
+    requested = Path(relative_path)
+    if requested.is_absolute() or ".." in requested.parts:
+        raise ValueError(f"SQL path must be relative to the SQL root: {relative_path}")
+
+    configured_root = os.getenv("FINOPS_SQL_ROOT")
+    source_root = Path(configured_root).resolve() if configured_root else _PROJECT_ROOT / "sql"
+    source_file = source_root / requested
+    if source_file.is_file():
+        return source_file.read_text(encoding="utf-8")
+
+    installed_file = _installed_sql_path(requested)
+    if installed_file is not None:
+        return installed_file.read_text(encoding="utf-8")
+    raise FileNotFoundError(
+        f"SQL file not found in {source_root} or the installed wheel: {relative_path}"
+    )
+
+
+def placeholders(template: str) -> set[str]:
+    return {
+        field_name
+        for _literal, field_name, _format_spec, _conversion in Formatter().parse(template)
+        if field_name
+    }
+
+
+def render_sql(relative_path: str, values: Mapping[str, str]) -> str:
+    template = sql_text(relative_path)
+    missing = placeholders(template) - set(values)
+    if missing:
+        raise KeyError(f"Missing SQL variables for {relative_path}: {sorted(missing)}")
+    return template.format_map(values)
+
+
+def split_statements(script: str) -> list[str]:
+    """Split project SQL files, which deliberately contain no semicolons in strings."""
+    return [statement.strip() for statement in script.split(";") if statement.strip()]
+
+
+def execute_sql_file(spark, relative_path: str, values: Mapping[str, str]) -> int:
+    rendered = render_sql(relative_path, values)
+    statements = split_statements(rendered)
+    for statement in statements:
+        spark.sql(statement)
+    return len(statements)
+
+
+def table_context(config) -> dict[str, str]:
+    """Return only validated, fully qualified identifiers from configuration."""
+    layers = {
+        "silver_canonical": "silver",
+        "silver_central": "silver",
+        "fact_cost_usage": "gold",
+        "dim_date": "gold",
+        "dim_billing_scope": "gold",
+        "dim_resource": "gold",
+        "dim_service": "gold",
+        "dim_sku": "gold",
+        "dim_location": "gold",
+        "dim_commitment_discount": "gold",
+        "dim_pricing": "gold",
+        "dim_charge_type": "gold",
+        "dim_tag": "gold",
+        "bridge_resource_tag": "gold",
+        "dm_monthly_billing": "datamart",
+        "dm_daily_billing": "datamart",
+        "dm_cost_by_scope_service_month": "datamart",
+        "dm_top_services": "datamart",
+        "dm_top_resources": "datamart",
+        "dm_cost_by_charge_type": "datamart",
+        "dm_sku_cost": "datamart",
+        "dm_savings_monthly": "datamart",
+        "dm_executive_summary_monthly": "datamart",
+        "dm_top_resources_monthly": "datamart",
+        "dm_data_quality_monthly": "datamart",
+        "dm_cost_by_resource_group_month": "datamart",
+        "dm_cost_by_subscription_month": "datamart",
+        "dm_cost_by_application_owner_month": "datamart",
+    }
+    result = {key: config.table(key, layer) for key, layer in layers.items()}
+    unsafe = {key: value for key, value in result.items() if not _SAFE_IDENTIFIER.fullmatch(value)}
+    if unsafe:
+        raise ValueError(f"Unsafe SQL identifiers in configuration: {unsafe}")
+    return result

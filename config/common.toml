@@ -1,0 +1,66 @@
+[project]
+name = "finops-cloud-data-platform"
+
+[storage]
+gcs_bucket = "dtl_finops"
+active_prefix = "focus"
+archive_prefix = "focus_archive"
+daily_path_template = "daily/year={year}/month={month}/day={day}/focus-{date}.parquet"
+daily_month_prefix_template = "daily/year={year}/month={month}/"
+billing_path_template = "monthly/year={year}/month={month}/billing-{billing_month}.parquet"
+archive_daily_after_month_close = true
+archive_billing_after_month_close = true
+
+[schemas]
+bronze = "bronze"
+silver = "silver"
+gold = "gold"
+datamart = "datamart"
+ops = "ops"
+
+[tables]
+bronze_daily = "focus_daily_raw"
+bronze_billing = "focus_billing_raw"
+silver_canonical = "focus_cost_usage"
+silver_central = "focus_cost_usage_central"
+fact_cost_usage = "fact_finops_cost_usage"
+dim_date = "dim_date"
+dim_billing_scope = "dim_billing_scope"
+dim_service = "dim_service"
+dim_resource = "dim_resource"
+dim_sku = "dim_sku"
+dim_location = "dim_location"
+dim_commitment_discount = "dim_commitment_discount"
+dim_pricing = "dim_pricing"
+dim_charge_type = "dim_charge_type"
+dim_tag = "dim_tag"
+bridge_resource_tag = "bridge_resource_tag"
+dm_monthly_billing = "dm_monthly_billing"
+dm_daily_billing = "dm_daily_billing"
+dm_cost_by_scope_service_month = "dm_cost_by_scope_service_month"
+dm_top_services = "dm_top_services"
+dm_top_resources = "dm_top_resources"
+dm_cost_by_charge_type = "dm_cost_by_charge_type"
+dm_sku_cost = "dm_sku_cost"
+dm_savings_monthly = "dm_savings_monthly"
+dm_executive_summary_monthly = "dm_executive_summary_monthly"
+dm_top_resources_monthly = "dm_top_resources_monthly"
+dm_data_quality_monthly = "dm_data_quality_monthly"
+dm_cost_by_resource_group_month = "dm_cost_by_resource_group_month"
+dm_cost_by_subscription_month = "dm_cost_by_subscription_month"
+dm_cost_by_application_owner_month = "dm_cost_by_application_owner_month"
+month_status = "month_status"
+pipeline_run = "pipeline_run"
+month_snapshot = "month_snapshot"
+reconciliation = "monthly_reconciliation"
+file_archive = "file_archive"
+
+[contract]
+path = "contracts/focus_cost_usage/v1.0.0/focus_cost_usage_contract.yaml"
+version = "1.0.0"
+focus_version = "1.0"
+
+[quality]
+currency = "EUR"
+provider = "Microsoft"
+amount_tolerance = "0.005"

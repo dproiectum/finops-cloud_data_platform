@@ -1,0 +1,9 @@
+environment = "dev"
+
+[databricks]
+profile = "finops-gcp-dev"
+catalog = "finops_dev"
+source_volume = "/Volumes/finops_dev/raw/focus"
+archive_volume = "/Volumes/finops_dev/raw/focus_archive"
+gcs_service_credential = "finops-gcs-dev"
+gcp_project = "global-repeater-355412"

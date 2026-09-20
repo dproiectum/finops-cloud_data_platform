@@ -1,0 +1,15 @@
+.venv/
+.venv-databricks/
+dist/
+build/
+*.egg-info/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+.DS_Store
+.databricks/
+.env
+.env.*
+!.env.example
+databricks.yml.lock

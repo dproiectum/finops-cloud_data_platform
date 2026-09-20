@@ -1,0 +1,97 @@
+resources:
+  jobs:
+    daily_incremental:
+      name: finops-${var.environment}-daily-incremental
+      parameters:
+        - name: source_uri
+          default: ""
+      tasks:
+        - task_key: daily_incremental
+          environment_key: default
+          python_wheel_task:
+            package_name: finops_cloud
+            entry_point: finops_daily
+            parameters:
+              - --environment
+              - ${var.environment}
+              - --source-uri
+              - "{{job.parameters.source_uri}}"
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: "4"
+            dependencies:
+              - ../dist/*.whl
+
+    monthly_close:
+      name: finops-${var.environment}-monthly-close
+      parameters:
+        - name: month
+          default: ""
+      tasks:
+        - task_key: monthly_close
+          environment_key: default
+          python_wheel_task:
+            package_name: finops_cloud
+            entry_point: finops_monthly
+            parameters:
+              - --environment
+              - ${var.environment}
+              - --month
+              - "{{job.parameters.month}}"
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: "4"
+            dependencies:
+              - ../dist/*.whl
+
+    billing_backfill:
+      name: finops-${var.environment}-billing-backfill
+      parameters:
+        - name: start_month
+          default: ""
+        - name: end_month
+          default: ""
+      tasks:
+        - task_key: billing_backfill
+          environment_key: default
+          python_wheel_task:
+            package_name: finops_cloud
+            entry_point: finops_backfill
+            parameters:
+              - --environment
+              - ${var.environment}
+              - --start-month
+              - "{{job.parameters.start_month}}"
+              - --end-month
+              - "{{job.parameters.end_month}}"
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: "4"
+            dependencies:
+              - ../dist/*.whl
+
+    archive_retry:
+      name: finops-${var.environment}-archive-retry
+      parameters:
+        - name: month
+          default: ""
+      tasks:
+        - task_key: archive_retry
+          environment_key: default
+          python_wheel_task:
+            package_name: finops_cloud
+            entry_point: finops_archive
+            parameters:
+              - --environment
+              - ${var.environment}
+              - --month
+              - "{{job.parameters.month}}"
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: "4"
+            dependencies:
+              - ../dist/*.whl
