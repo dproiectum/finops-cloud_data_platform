@@ -1,5 +1,5 @@
 # Databricks integration tests
 
-Ces tests seront ajoutés et exécutés contre `finops_dev` après configuration du
-workspace, du Databricks Runtime, de la Storage Credential et des deux External
-Volumes. Aucun test local ne doit écrire dans `finops_prod`.
+These tests will run against `finops_dev` after the workspace, Databricks
+Runtime, Storage Credential, and both External Volumes are configured. Local
+tests must never write to `finops_prod`.

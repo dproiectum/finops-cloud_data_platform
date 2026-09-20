@@ -1,35 +1,34 @@
-# Décisions techniques
+# Technical decisions
 
-## Autorité des sources
+## Source authority
 
-- Daily : données provisoires d'un mois ouvert.
-- Monthly billing : version détaillée et définitive du mois.
-- Les deux sources ne sont jamais additionnées dans la fact.
-- Le billing remplace atomiquement le même mois dans Silver et Gold.
+- Daily files contain provisional data for an open month.
+- Monthly billing is the detailed and authoritative version of a closed month.
+- Daily and monthly sources are never added together in the fact table.
+- Monthly billing atomically replaces the same month in Silver and Gold.
 
-## Conservation
+## Retention
 
-- Les fichiers GCS actifs sont archivés seulement après les contrôles `AFTER`
-  et le rafraîchissement des produits analytiques.
-- Les données Raw/Bronze et l'historique Delta restent disponibles.
-- L'archivage GCS est idempotent et vérifie génération, taille et CRC32C.
-- Une rectification qui réutilise le même nom de billing est conservée sous un
-  sous-dossier `revision=<generation>` au lieu d'écraser l'archive précédente.
+- Active GCS files are archived only after the `AFTER` checks and analytical
+  product refresh complete successfully.
+- Raw/Bronze data and Delta history remain available.
+- GCS archival is idempotent and verifies generation, size, and CRC32C.
+- A corrected billing file that reuses an object name is preserved under
+  `revision=<generation>` instead of overwriting the previous archive.
 
-## Portabilité
+## Portability
 
-Le Data Contract, les configurations et les modèles SQL sont indépendants des
-notebooks. Les opérations physiques Delta, Unity Catalog et GCS restent
-explicitement adaptées à Databricks/GCP au lieu d'être masquées par une
-abstraction universelle.
+The Data Contract, configuration, and SQL models are independent of notebooks.
+Physical Delta, Unity Catalog, and GCS operations remain explicitly adapted to
+Databricks/GCP instead of being hidden behind a universal abstraction.
 
-## Modèle analytique
+## Analytical model
 
-Gold reprend le schéma en étoile complet du POC : dix dimensions, une table de
-pont ressource/tag et `fact_finops_cost_usage`. Les quatorze datamarts du POC
-sont également conservés. Le modèle, le grain, les relations et les écarts dus
-au schéma source sont détaillés dans `data_model.md`.
+Gold preserves the complete POC star schema: ten dimensions, one resource/tag
+bridge, and `fact_finops_cost_usage`. The fourteen POC datamarts are also
+preserved. The model, grain, relationships, and source-schema limitations are
+documented in `data_model.md`.
 
-Les DDL et DML sont la source de vérité du modèle. Python/PySpark charge ces
-fichiers SQL depuis le package, injecte uniquement les noms qualifiés issus des
-configurations TOML, puis pilote leur exécution.
+DDL and DML files are the model's source of truth. Python/PySpark loads the SQL
+files from the package, injects only qualified identifiers from validated TOML
+configuration, and controls their execution order.

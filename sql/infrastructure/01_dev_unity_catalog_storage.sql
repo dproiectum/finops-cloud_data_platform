@@ -14,10 +14,10 @@ CREATE SCHEMA IF NOT EXISTS `finops_dev`.`raw`
 COMMENT 'Volumes externes contenant les fichiers FOCUS source';
 
 CREATE SCHEMA IF NOT EXISTS `finops_dev`.`bronze`
-COMMENT 'Donnees FOCUS brutes ingerees au format Delta';
+COMMENT 'Raw FOCUS data ingested in Delta format';
 
 CREATE SCHEMA IF NOT EXISTS `finops_dev`.`silver`
-COMMENT 'Donnees conformes au data contract et table centrale';
+COMMENT 'Data conforming to the Data Contract and the central table';
 
 CREATE SCHEMA IF NOT EXISTS `finops_dev`.`gold`
 COMMENT 'Modele dimensionnel FinOps';

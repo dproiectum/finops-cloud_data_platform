@@ -1,70 +1,68 @@
 # FinOps Cloud Data Platform
 
-Projet actif Databricks/GCP issu du POC local. Le code est développé dans VS
-Code, exécuté sur Databricks DEV avec Databricks Connect, puis déployé en PROD
-avec un Databricks Asset Bundle.
+Active Databricks/GCP implementation evolved from the local POC. Code is
+versioned in GitHub, developed either in VS Code or a Databricks Git Folder,
+executed in Databricks DEV, and promoted to PROD through a Databricks Bundle.
 
-Le prototype historique reste dans `../FinOps Data Platform - POC`. Le dataset
-synthétique unique est produit par `../FinOps Data Generator`.
+The historical prototype remains in `../FinOps Data Platform - POC`. The shared
+synthetic dataset is produced by `../FinOps Data Generator`.
 
-## Notebooks Databricks
+## Databricks notebooks
 
-Le dossier `notebooks/` fournit les interfaces interactives du projet. Chaque
-notebook sépare les paramètres, l'appel au pipeline Python et l'affichage des
-contrôles. La logique reste centralisée dans `src/` et `sql/`; elle n'est pas
-recopiée dans les cellules.
+The `notebooks/` directory provides interactive pipeline entry points. Each
+notebook separates runtime parameters, the call to maintained Python code, and
+result inspection. Business logic remains centralized in `src/` and `sql/`.
 
-Les quatre Jobs du Bundle exécutent ces notebooks avec la wheel du projet comme
-dépendance. Ils peuvent aussi être ouverts depuis un Git Folder et exécutés
-cellule par cellule pour une démonstration ou un diagnostic.
+The four Bundle Jobs execute these notebooks with the project wheel as a
+dependency. Engineers can also open them from a Databricks Git Folder and run
+one cell at a time for demonstrations and troubleshooting.
 
 ## Architecture
 
 ```text
 FinOps Data Generator
-        ↓ publication sans régénération
+        ↓ publish without regeneration
 gs://dtl_finops/focus
         ↓
-Databricks Bronze → Data Contract → Silver canonique + table centrale
+Databricks Bronze → Data Contract → canonical Silver + central table
         ↓                            ↑
-Gold dimensions/fact                 │ remplacement mensuel atomique
+Gold dimensions/fact                 │ atomic monthly replacement
         ↓                            │
-Datamarts                    Billing mensuel
+Datamarts                    Monthly billing
         ↓
 SQL Warehouse / Dashboard
 
-Après clôture : gs://dtl_finops/focus → gs://dtl_finops/focus_archive
+After close: gs://dtl_finops/focus → gs://dtl_finops/focus_archive
 ```
 
-## Trois jobs, deux logiques métier
+## Four Jobs, two business flows
 
-- `finops-daily` ajoute les nouveaux fichiers quotidiens aux mois ouverts.
-- `finops-monthly` capture `BEFORE`, `SOURCE` et `AFTER`, remplace le mois
-  atomiquement par le billing, recalcule Gold/datamarts et archive les sources.
-- `finops-backfill` appelle le même traitement mensuel pour chaque mois de
-  l'historique. Il ne duplique pas la logique de clôture.
-- `finops-archive` reprend uniquement un archivage GCS en attente.
+- `finops-daily` appends new daily files to open months.
+- `finops-monthly` captures `BEFORE`, `SOURCE`, and `AFTER`, atomically replaces
+  the month with billing data, refreshes Gold/datamarts, and archives sources.
+- `finops-backfill` invokes the same monthly close for every historical month;
+  it does not duplicate close logic.
+- `finops-archive` retries only a pending GCS archive operation.
 
-Raw et Bronze ne sont jamais supprimés. Le remplacement concerne Silver, la
-table centrale et la partition logique mensuelle de la fact Gold.
+Raw and Bronze are never deleted. Replacement applies to Silver, the central
+table, and the logical monthly partition of the Gold fact table.
 
-## Modèle Gold et datamarts
+## Gold model and datamarts
 
-Le modèle cloud reprend le schéma en étoile du POC : dix dimensions, la table
-de pont `bridge_resource_tag`, la fact `fact_finops_cost_usage` et quatorze
-datamarts. Les structures et transformations sont définies en SQL puis
-exécutées par PySpark.
+The cloud model preserves the POC star schema: ten dimensions,
+`bridge_resource_tag`, `fact_finops_cost_usage`, and fourteen datamarts. SQL
+owns the physical structures and transformations; PySpark controls execution.
 
-- Documentation : `docs/data_model.md`
-- Création des tables Gold : `sql/gold/table_creation`
-- Chargements Gold : `sql/gold/data_loading`
-- Rafraîchissement des datamarts : `sql/datamarts/table_refresh`
-- Exécuteur commun : `src/finops_cloud/sql_runner.py`
+- Model documentation: `docs/data_model.md`
+- Gold table creation: `sql/gold/table_creation`
+- Gold data loading: `sql/gold/data_loading`
+- Datamart refresh: `sql/datamarts/table_refresh`
+- Shared SQL runner: `src/finops_cloud/sql_runner.py`
 
-## Zones à adapter
+## Environment-specific settings
 
-Les valeurs communes se trouvent dans `config/common.toml`. Les seules zones
-propres aux environnements sont :
+Common values live in `config/common.toml`. Environment-specific values are
+limited to:
 
 ```text
 config/dev.toml
@@ -72,29 +70,27 @@ config/prod.toml
 databricks.yml
 ```
 
-À modifier avant la première exécution :
+Review before the first execution:
 
-1. Les profils Databricks `finops-gcp-dev` et `finops-prod`.
-2. Les catalogues `finops_dev` et `finops_prod`.
-3. Les deux External Volumes pointant vers `focus` et `focus_archive`.
-4. Le bucket GCS si son nom diffère de `dtl_finops`.
-5. Le projet GCP et les Service Credentials `finops-gcs-dev/prod` utilisés par
-   le SDK pendant l'archivage.
-6. La version de `databricks-connect` pour qu'elle corresponde au Runtime.
+1. Databricks profiles `finops-gcp-dev` and `finops-prod`.
+2. Catalogs `finops_dev` and `finops_prod`.
+3. External Volumes pointing to `focus` and `focus_archive`.
+4. The GCS bucket when it differs from `dtl_finops`.
+5. The GCP project and `finops-gcs-dev/prod` Service Credentials used by the
+   SDK during archival.
+6. The `databricks-connect` version so it matches the selected Runtime.
 
-Aucun token, secret GCP ou fichier de compte de service ne doit être ajouté au
-dépôt. L'authentification Databricks utilise les profils OAuth. Les External
-Volumes utilisent une Storage Credential Unity Catalog ; le SDK d'archivage
-utilise une Service Credential Unity Catalog dans un Job, ou les Application
-Default Credentials pendant un test local.
+Never commit tokens, GCP secrets, or service-account key files. Databricks
+authentication uses OAuth profiles. External Volumes use a Unity Catalog
+Storage Credential. The archival SDK uses a Unity Catalog Service Credential
+in Jobs or Application Default Credentials during controlled local tests.
 
-La procédure administrative détaillée se trouve dans
-`docs/databricks_gcs_setup.md`.
+See `docs/databricks_gcs_setup.md` for the administrative setup procedure.
 
-## Environnement VS Code
+## VS Code environment
 
-Le POC existant utilise Python 3.14. Le projet Databricks doit utiliser un
-environnement séparé compatible avec le Runtime, par exemple Python 3.12 :
+Use a dedicated Python version compatible with the Databricks Runtime, for
+example Python 3.12:
 
 ```bash
 cd "/Users/dtl/Desktop/PFE/FinOps Cloud Data Platform"
@@ -102,13 +98,12 @@ python3.12 -m venv .venv-databricks
 .venv-databricks/bin/python -m pip install -e '.[databricks,dev]'
 ```
 
-La contrainte `databricks-connect>=17.3,<17.4` est une valeur de départ. Elle
-doit être ajustée avant installation si le compute choisi utilise un autre
-Databricks Runtime.
+`databricks-connect>=17.3,<17.4` is the initial constraint. Adjust it when the
+selected compute uses a different Databricks Runtime.
 
-## Exécution depuis VS Code
+## Run from VS Code
 
-Fichier quotidien précis :
+One daily file:
 
 ```bash
 .venv-databricks/bin/finops-daily \
@@ -116,13 +111,13 @@ Fichier quotidien précis :
   --source-uri /Volumes/finops_dev/raw/focus/daily/year=2026/month=07/day=01/focus-2026-07-01.parquet
 ```
 
-Clôture mensuelle :
+Monthly close:
 
 ```bash
 .venv-databricks/bin/finops-monthly --environment dev --month 2026-07
 ```
 
-Backfill initial :
+Initial backfill:
 
 ```bash
 .venv-databricks/bin/finops-backfill \
@@ -131,7 +126,7 @@ Backfill initial :
   --end-month 2026-06
 ```
 
-## Déploiement
+## Deployment
 
 ```bash
 databricks bundle validate -t dev
@@ -140,34 +135,34 @@ databricks bundle run -t dev daily_incremental \
   --params source_uri=/Volumes/finops_dev/raw/focus/daily/year=2026/month=07/day=01/focus-2026-07-01.parquet
 ```
 
-Après validation DEV, le même artefact est déployé en PROD :
+After DEV validation, promote the same artifact to PROD:
 
 ```bash
 databricks bundle validate -t prod
 databricks bundle deploy -t prod
 ```
 
-## Audit mensuel
+## Monthly audit
 
-Le schéma `ops` contient :
+The `ops` schema contains:
 
-- `pipeline_run` : début, fin et statut de chaque exécution ;
-- `month_snapshot` : métriques `BEFORE`, `SOURCE` et `AFTER` ;
-- `monthly_reconciliation` : écarts Daily/Billing et contrôle technique ;
-- `month_status` : `OPEN`, `RECONCILING`, `CLOSED_ARCHIVE_PENDING`, `CLOSED` ;
-- `file_archive` : URI, générations, CRC32C et statut de chaque objet déplacé.
+- `pipeline_run`: start, end, and status of each execution;
+- `month_snapshot`: `BEFORE`, `SOURCE`, and `AFTER` metrics;
+- `monthly_reconciliation`: Daily/Billing differences and technical controls;
+- `month_status`: `OPEN`, `RECONCILING`, `CLOSED_ARCHIVE_PENDING`, or `CLOSED`;
+- `file_archive`: URI, generations, CRC32C, and status of each moved object.
 
-Si le chargement réussit mais que GCS échoue, le mois devient
-`CLOSED_ARCHIVE_PENDING`. Une relance du job mensuel ou de `finops-archive`
-reprend uniquement l'archivage, sans recharger Silver.
+If loading succeeds but GCS archival fails, the month becomes
+`CLOSED_ARCHIVE_PENDING`. A new monthly or `finops-archive` run retries only
+archival and does not reload Silver.
 
-## Tests locaux
+## Local tests
 
-Les tests locaux ne démarrent pas Spark et ne contactent ni Databricks ni GCS :
+Local tests do not start Spark or contact Databricks or GCS:
 
 ```bash
 PYTHONPATH=src python -m unittest discover -s tests/unit -v
 ```
 
-Les tests d'intégration seront exécutés dans le catalogue DEV lorsque le
-workspace, le Runtime et les External Volumes auront été renseignés.
+Integration tests run against the DEV catalog after the workspace, Runtime,
+and External Volumes are configured.

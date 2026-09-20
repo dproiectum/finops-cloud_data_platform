@@ -1,22 +1,21 @@
-# Scripts SQL
+# SQL scripts
 
-Ce dossier est la source de vérité de tous les scripts SQL du projet :
+This directory is the source of truth for all project SQL:
 
-- `infrastructure/` : objets administratifs Unity Catalog et GCS, exécutés
-  manuellement avant le premier déploiement
-- `gold/table_creation/` : DDL idempotent des dimensions, de la table de faits
-  et de la table de pont
-- `gold/data_loading/` : chargement des dimensions, tags et faits
-- `datamarts/table_refresh/` : transformation puis création ou remplacement
-  des quatorze tables analytiques
+- `infrastructure/`: Unity Catalog and GCS administrative objects, executed
+  manually before the first deployment
+- `gold/table_creation/`: idempotent DDL for dimensions, the fact table, and
+  the bridge table
+- `gold/data_loading/`: dimension, tag, and fact loading
+- `datamarts/table_refresh/`: transformation followed by creation or
+  replacement of the fourteen analytical tables
 
-Ces scripts sont lus dynamiquement par
-`src/finops_cloud/sql_runner.py`, puis exécutés par `spark.sql()`. La
-configuration de packaging les ajoute aussi à la wheel Databricks comme
-fichiers de données. Il n'existe donc pas de seconde copie sous `src/`.
+`src/finops_cloud/sql_runner.py` loads these files dynamically and executes
+them through `spark.sql()`. The packaging configuration also embeds them in the
+Databricks wheel as data files. There is no duplicate SQL copy under `src/`.
 
-En développement, le runner trouve automatiquement ce dossier à la racine du
-projet. Un chemin différent peut être fourni avec `FINOPS_SQL_ROOT` pour un
-test contrôlé, sans modifier les scripts Python.
+During development, the runner automatically finds this root-level directory.
+`FINOPS_SQL_ROOT` can select another controlled path for testing without
+changing Python code.
 
-Le modèle et l'ordre d'exécution sont documentés dans `../docs/data_model.md`.
+The model and execution order are documented in `../docs/data_model.md`.

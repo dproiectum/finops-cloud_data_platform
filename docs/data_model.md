@@ -1,34 +1,31 @@
-# Modèle de données analytique FinOps
+# FinOps analytical data model
 
-## Principe
+## Principle
 
-Le modèle cloud reprend le schéma en étoile validé dans le POC. La table
-Silver centrale conserve la représentation FOCUS complète pour l'exploration
-et les contrôles, tandis que Gold expose un modèle stable pour la BI.
+The cloud model preserves the star schema validated in the POC. The central
+Silver table retains the complete FOCUS representation for exploration and
+controls, while Gold exposes a stable BI model.
 
-Le code SQL exécutable se trouve dans :
+Executable SQL is organized by purpose:
 
-- `sql/gold/table_creation` pour le DDL Gold
-- `sql/gold/data_loading` pour les chargements Gold
-- `sql/datamarts/table_refresh` pour les 14 produits analytiques
+- `sql/gold/table_creation` for Gold DDL;
+- `sql/gold/data_loading` for Gold loads;
+- `sql/datamarts/table_refresh` for the fourteen analytical products.
 
-Ces fichiers sont la source de vérité du projet et sont embarqués comme données
-dans la wheel Python. PySpark les appelle dans l'ordre, mais ne redéfinit pas
-leur logique métier.
+These files are the project's source of truth and are embedded as data in the
+Python wheel. PySpark invokes them in order without redefining business logic.
 
 ## Grain
 
-`fact_finops_cost_usage` contient une ligne par ligne de coût ou d'usage FOCUS
-reçue dans un fichier source. `cost_usage_sk` est une clé technique SHA-256
-déterministe construite à partir du fichier source et de la position logique de
-la ligne. `billing_month` est conservé dans la fact pour permettre le
-remplacement transactionnel d'un mois Delta.
+`fact_finops_cost_usage` contains one row per FOCUS cost or usage line received
+in a source file. `cost_usage_sk` is a deterministic SHA-256 technical key
+derived from the source file and logical row position. `billing_month` remains
+in the fact table to support transactional replacement of one Delta month.
 
-Le billing mensuel est l'autorité finale. Il remplace la partition logique du
-même mois précédemment alimentée par les fichiers daily. Les deux sources ne
-sont jamais additionnées.
+Monthly billing is authoritative. It replaces the logical partition previously
+fed by daily files for the same month. The two sources are never added together.
 
-## Relations principales
+## Main relationships
 
 ```mermaid
 erDiagram
@@ -45,68 +42,67 @@ erDiagram
     DIM_TAG ||--o{ BRIDGE_RESOURCE_TAG : tag_sk
 ```
 
-## Tables Gold
+## Gold tables
 
-| Table | Rôle | Clé |
+| Table | Purpose | Key |
 |---|---|---|
-| `dim_date` | Calendrier commun aux sept dates de la fact | `date_sk` au format `yyyyMMdd` |
-| `dim_billing_scope` | Compte, sous-compte, profil, client et centre de coût | `billing_scope_sk` |
-| `dim_resource` | Ressource, groupe et attributs applicatifs issus des tags | `resource_sk` |
-| `dim_service` | Service, fournisseur, éditeur et revendeur | `service_sk` |
-| `dim_sku` | SKU, meter, offre, ordre, région et terme | `sku_sk` |
-| `dim_location` | Région et zone de disponibilité | `location_sk` |
-| `dim_commitment_discount` | Réservation, Savings Plan ou autre engagement | `commitment_sk` |
-| `dim_pricing` | Catégorie, unité et devise de prix | `pricing_sk` |
-| `dim_charge_type` | Catégorie et fréquence de charge | `charge_type_sk` |
-| `dim_tag` | Couple clé/valeur de tag normalisé | `tag_sk` |
-| `bridge_resource_tag` | Relation plusieurs-à-plusieurs ressource/tag | clé composée ressource/tag |
-| `fact_finops_cost_usage` | Mesures de coûts, prix, quantités et clés étrangères | `cost_usage_sk` |
+| `dim_date` | Shared calendar for the fact table's seven dates | `date_sk` as `yyyyMMdd` |
+| `dim_billing_scope` | Account, subaccount, profile, customer, and cost center | `billing_scope_sk` |
+| `dim_resource` | Resource, group, and application attributes derived from tags | `resource_sk` |
+| `dim_service` | Service, provider, publisher, and reseller | `service_sk` |
+| `dim_sku` | SKU, meter, offer, order, region, and term | `sku_sk` |
+| `dim_location` | Region and availability zone | `location_sk` |
+| `dim_commitment_discount` | Reservation, Savings Plan, or other commitment | `commitment_sk` |
+| `dim_pricing` | Pricing category, unit, and currency | `pricing_sk` |
+| `dim_charge_type` | Charge category and frequency | `charge_type_sk` |
+| `dim_tag` | Normalized tag key/value pair | `tag_sk` |
+| `bridge_resource_tag` | Many-to-many resource/tag relationship | resource/tag composite key |
+| `fact_finops_cost_usage` | Costs, prices, quantities, and foreign keys | `cost_usage_sk` |
 
-Les clés de dimensions sont des chaînes SHA-256. Ce choix est déterministe,
-portable et évite de dépendre d'une séquence propre à un environnement.
+Dimension keys are deterministic SHA-256 strings. This portable design avoids
+environment-specific sequences.
 
-`dim_billing_scope` et `dim_resource` appliquent une gestion Type 1 : les
-attributs courants sont mis à jour par `MERGE`. Les colonnes de validité sont
-conservées pour la compatibilité du modèle et une future évolution SCD2, mais
-la version actuelle ne prétend pas historiser chaque changement d'attribut.
+`dim_billing_scope` and `dim_resource` currently use Type 1 handling: `MERGE`
+updates current attributes. Validity columns remain for model compatibility and
+a future SCD2 evolution, but this version does not claim to preserve every
+attribute change.
 
-Le jeu de données actuel ne fournit ni `AvailabilityZone` ni identifiant de
-charge natif. `availability_zone` prend donc la valeur `Unknown` et les
-identifiants de charge sont générés de manière déterministe. Si ces champs sont
-ajoutés à une future version du Data Contract, une migration SQL explicite sera
-réalisée.
+The current dataset provides neither `AvailabilityZone` nor a native charge
+identifier. `availability_zone` therefore uses `Unknown`, and charge IDs are
+generated deterministically. A future Data Contract version that adds these
+fields will require an explicit SQL migration.
 
-## Datamarts certifiés
+## Certified datamarts
 
-| Datamart | Usage principal |
+| Datamart | Main use |
 |---|---|
-| `dm_monthly_billing` | Coût facturé mensuel |
-| `dm_daily_billing` | Tendance quotidienne |
-| `dm_cost_by_scope_service_month` | Coût par périmètre et service |
-| `dm_top_services` | Services les plus coûteux |
-| `dm_top_resources` | Ressources les plus coûteuses |
-| `dm_cost_by_charge_type` | Analyse des catégories de charge |
-| `dm_sku_cost` | Analyse SKU et meter |
-| `dm_savings_monthly` | Économies négociées et engagements |
-| `dm_executive_summary_monthly` | KPI de synthèse mensuelle |
-| `dm_top_resources_monthly` | Ressources par mois |
-| `dm_data_quality_monthly` | Indicateurs de qualité Silver |
-| `dm_cost_by_resource_group_month` | Coût par groupe de ressources |
-| `dm_cost_by_subscription_month` | Coût par sous-compte/abonnement |
-| `dm_cost_by_application_owner_month` | Coût et responsabilité applicative |
+| `dm_monthly_billing` | Monthly billed cost |
+| `dm_daily_billing` | Daily trend |
+| `dm_cost_by_scope_service_month` | Cost by scope and service |
+| `dm_top_services` | Most expensive services |
+| `dm_top_resources` | Most expensive resources |
+| `dm_cost_by_charge_type` | Charge-category analysis |
+| `dm_sku_cost` | SKU and meter analysis |
+| `dm_savings_monthly` | Negotiated and commitment savings |
+| `dm_executive_summary_monthly` | Monthly executive KPIs |
+| `dm_top_resources_monthly` | Resources by month |
+| `dm_data_quality_monthly` | Silver quality indicators |
+| `dm_cost_by_resource_group_month` | Cost by resource group |
+| `dm_cost_by_subscription_month` | Cost by subaccount/subscription |
+| `dm_cost_by_application_owner_month` | Cost and application ownership |
 
-Les datamarts 8, 9 et 11 utilisent directement la table Silver centrale car
-ils exploitent des champs FOCUS et des métadonnées techniques qui ne font pas
-tous partie de la fact. Les autres datamarts utilisent le modèle Gold.
+Datamarts 8, 9, and 11 read the central Silver table directly because they use
+FOCUS fields and technical metadata that are not all present in the fact table.
+The other datamarts use the Gold model.
 
-## Ordre d'exécution
+## Execution order
 
-1. `00_create_gold_tables.sql` crée les structures si elles sont absentes.
-2. `10_merge_dimensions.sql` alimente les dimensions.
-3. `20_merge_tags.sql` normalise les tags et alimente la table de pont.
-4. `30_replace_fact_month.sql` remplace le mois dans la fact.
-5. Les scripts `01` à `14` recréent les datamarts depuis les tables certifiées.
+1. `00_create_gold_tables.sql` creates missing structures.
+2. `10_merge_dimensions.sql` loads dimensions.
+3. `20_merge_tags.sql` normalizes tags and loads the bridge table.
+4. `30_replace_fact_month.sql` replaces the month in the fact table.
+5. Scripts `01` through `14` recreate datamarts from certified tables.
 
-La première version privilégie un recalcul complet des datamarts pour garantir
-un résultat simple et reproductible. Une optimisation par mois pourra être
-introduite après mesure du volume et du temps d'exécution dans Databricks DEV.
+The first version deliberately performs a full datamart refresh for simplicity
+and reproducibility. Month-level optimization can follow measurements in
+Databricks DEV.
