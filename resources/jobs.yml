@@ -2,6 +2,9 @@ resources:
   jobs:
     daily_incremental:
       name: finops-${var.environment}-daily-incremental
+      # DEV cost guardrails: favor batch cost efficiency and prevent parallel runs.
+      performance_target: STANDARD
+      max_concurrent_runs: 1
       git_source:
         git_url: https://github.com/dproiectum/finops-cloud_data_platform
         git_provider: gitHub
@@ -30,6 +33,9 @@ resources:
 
     monthly_close:
       name: finops-${var.environment}-monthly-close
+      # DEV cost guardrails: favor batch cost efficiency and prevent parallel runs.
+      performance_target: STANDARD
+      max_concurrent_runs: 1
       git_source:
         git_url: https://github.com/dproiectum/finops-cloud_data_platform
         git_provider: gitHub
@@ -62,6 +68,9 @@ resources:
 
     billing_backfill:
       name: finops-${var.environment}-billing-backfill
+      # DEV cost guardrails: favor batch cost efficiency and prevent parallel runs.
+      performance_target: STANDARD
+      max_concurrent_runs: 1
       git_source:
         git_url: https://github.com/dproiectum/finops-cloud_data_platform
         git_provider: gitHub
@@ -94,6 +103,9 @@ resources:
 
     archive_retry:
       name: finops-${var.environment}-archive-retry
+      # DEV cost guardrails: favor batch cost efficiency and prevent parallel runs.
+      performance_target: STANDARD
+      max_concurrent_runs: 1
       git_source:
         git_url: https://github.com/dproiectum/finops-cloud_data_platform
         git_provider: gitHub
