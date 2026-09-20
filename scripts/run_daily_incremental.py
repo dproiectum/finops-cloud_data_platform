@@ -4,8 +4,10 @@ from pathlib import Path
 import sys
 
 
-# Make the repository's src/ package importable when Databricks runs this file.
-SOURCE_ROOT = Path(__file__).resolve().parents[1] / "src"
+# Databricks compiles Git Python Script Tasks without defining __file__.
+# The current code object's filename remains available in both execution modes.
+SCRIPT_PATH = Path(globals().get("__file__", sys._getframe().f_code.co_filename)).resolve()
+SOURCE_ROOT = SCRIPT_PATH.parents[1] / "src"
 sys.path.insert(0, str(SOURCE_ROOT))
 
 from finops_cloud.pipelines.daily_incremental import main  # noqa: E402

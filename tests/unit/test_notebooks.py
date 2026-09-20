@@ -53,6 +53,14 @@ class NotebookTests(unittest.TestCase):
             content = (ROOT / "scripts" / name).read_text(encoding="utf-8")
             self.assertIn(import_line, content)
 
+    def test_python_script_entry_points_work_without_dunder_file(self):
+        """Reproduce Databricks exec(), which does not define __file__."""
+        for script in sorted((ROOT / "scripts").glob("run_*.py")):
+            source = script.read_text(encoding="utf-8")
+            namespace = {"__name__": "databricks_python_script_task"}
+            exec(compile(source, str(script), "exec"), namespace)
+            self.assertEqual(namespace["SOURCE_ROOT"], ROOT / "src")
+
 
 if __name__ == "__main__":
     unittest.main()
