@@ -2,92 +2,120 @@ resources:
   jobs:
     daily_incremental:
       name: finops-${var.environment}-daily-incremental
+      git_source:
+        git_url: https://github.com/dproiectum/finops-cloud_data_platform
+        git_provider: gitHub
+        git_branch: ${var.git_branch}
       parameters:
         - name: source_uri
           default: ""
       tasks:
         - task_key: daily_incremental
           environment_key: default
-          notebook_task:
-            notebook_path: ../notebooks/01_daily_incremental.ipynb
-            base_parameters:
-              environment: ${var.environment}
-              source_uri: "{{job.parameters.source_uri}}"
+          spark_python_task:
+            python_file: scripts/run_daily_incremental.py
+            source: GIT
+            parameters:
+              - --environment
+              - ${var.environment}
+              - --source-uri
+              - "{{job.parameters.source_uri}}"
       environments:
         - environment_key: default
           spec:
             environment_version: "4"
             dependencies:
-              - ../dist/*.whl
+              - PyYAML>=6.0
+              - google-cloud-storage>=3.0
 
     monthly_close:
       name: finops-${var.environment}-monthly-close
+      git_source:
+        git_url: https://github.com/dproiectum/finops-cloud_data_platform
+        git_provider: gitHub
+        git_branch: ${var.git_branch}
       parameters:
         - name: month
           default: ""
         - name: source_uri
           default: ""
-        - name: archive
-          default: "true"
       tasks:
         - task_key: monthly_close
           environment_key: default
-          notebook_task:
-            notebook_path: ../notebooks/02_monthly_close.ipynb
-            base_parameters:
-              environment: ${var.environment}
-              month: "{{job.parameters.month}}"
-              source_uri: "{{job.parameters.source_uri}}"
-              archive: "{{job.parameters.archive}}"
+          spark_python_task:
+            python_file: scripts/run_monthly_close.py
+            source: GIT
+            parameters:
+              - --environment
+              - ${var.environment}
+              - --month
+              - "{{job.parameters.month}}"
+              - --source-uri
+              - "{{job.parameters.source_uri}}"
       environments:
         - environment_key: default
           spec:
             environment_version: "4"
             dependencies:
-              - ../dist/*.whl
+              - PyYAML>=6.0
+              - google-cloud-storage>=3.0
 
     billing_backfill:
       name: finops-${var.environment}-billing-backfill
+      git_source:
+        git_url: https://github.com/dproiectum/finops-cloud_data_platform
+        git_provider: gitHub
+        git_branch: ${var.git_branch}
       parameters:
         - name: start_month
           default: ""
         - name: end_month
           default: ""
-        - name: archive
-          default: "true"
       tasks:
         - task_key: billing_backfill
           environment_key: default
-          notebook_task:
-            notebook_path: ../notebooks/03_billing_backfill.ipynb
-            base_parameters:
-              environment: ${var.environment}
-              start_month: "{{job.parameters.start_month}}"
-              end_month: "{{job.parameters.end_month}}"
-              archive: "{{job.parameters.archive}}"
+          spark_python_task:
+            python_file: scripts/run_billing_backfill.py
+            source: GIT
+            parameters:
+              - --environment
+              - ${var.environment}
+              - --start-month
+              - "{{job.parameters.start_month}}"
+              - --end-month
+              - "{{job.parameters.end_month}}"
       environments:
         - environment_key: default
           spec:
             environment_version: "4"
             dependencies:
-              - ../dist/*.whl
+              - PyYAML>=6.0
+              - google-cloud-storage>=3.0
 
     archive_retry:
       name: finops-${var.environment}-archive-retry
+      git_source:
+        git_url: https://github.com/dproiectum/finops-cloud_data_platform
+        git_provider: gitHub
+        git_branch: ${var.git_branch}
       parameters:
         - name: month
           default: ""
       tasks:
         - task_key: archive_retry
           environment_key: default
-          notebook_task:
-            notebook_path: ../notebooks/04_archive_retry.ipynb
-            base_parameters:
-              environment: ${var.environment}
-              month: "{{job.parameters.month}}"
+          spark_python_task:
+            python_file: scripts/run_archive_retry.py
+            source: GIT
+            parameters:
+              - --environment
+              - ${var.environment}
+              - --month
+              - "{{job.parameters.month}}"
       environments:
         - environment_key: default
           spec:
             environment_version: "4"
             dependencies:
-              - ../dist/*.whl
+              - PyYAML>=6.0
+              - google-cloud-storage>=3.0

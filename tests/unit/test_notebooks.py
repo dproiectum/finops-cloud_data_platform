@@ -29,10 +29,24 @@ class NotebookTests(unittest.TestCase):
             content = (ROOT / "notebooks" / name).read_text(encoding="utf-8")
             self.assertIn(import_line, content)
 
-    def test_bundle_jobs_use_notebooks(self):
+    def test_bundle_jobs_use_git_python_scripts(self):
         jobs = (ROOT / "resources/jobs.yml").read_text(encoding="utf-8")
-        self.assertEqual(jobs.count("notebook_task:"), 4)
+        self.assertEqual(jobs.count("spark_python_task:"), 4)
+        self.assertEqual(jobs.count("source: GIT"), 4)
+        self.assertEqual(jobs.count("git_source:"), 4)
+        self.assertNotIn("notebook_task:", jobs)
         self.assertNotIn("python_wheel_task:", jobs)
+
+    def test_python_script_entry_points_call_maintained_modules(self):
+        expected = {
+            "run_daily_incremental.py": "finops_cloud.jobs.daily_incremental import main",
+            "run_monthly_close.py": "finops_cloud.jobs.monthly_close import main",
+            "run_billing_backfill.py": "finops_cloud.jobs.billing_backfill import main",
+            "run_archive_retry.py": "finops_cloud.jobs.archive_retry import main",
+        }
+        for name, import_line in expected.items():
+            content = (ROOT / "scripts" / name).read_text(encoding="utf-8")
+            self.assertIn(import_line, content)
 
 
 if __name__ == "__main__":

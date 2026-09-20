@@ -10,7 +10,7 @@ not duplicate Python business logic or SQL scripts.
 - `03_billing_backfill.ipynb`: initial load for a range of billing months
 - `04_archive_retry.ipynb`: retry a pending GCS archive operation
 
-Databricks widgets expose runtime parameters. Bundle Jobs populate them
-automatically, while an engineer can edit them and execute one cell at a time
-during a demonstration or investigation. Notebook outputs must not be stored
-in Git.
+Databricks widgets expose runtime parameters for manual execution. Production
+Jobs use the corresponding Python entry points under `scripts/`. An engineer
+can edit notebook parameters and execute one cell at a time during a
+demonstration or investigation. Notebook outputs must not be stored in Git.

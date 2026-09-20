@@ -13,9 +13,19 @@ The `notebooks/` directory provides interactive pipeline entry points. Each
 notebook separates runtime parameters, the call to maintained Python code, and
 result inspection. Business logic remains centralized in `src/` and `sql/`.
 
-The four Bundle Jobs execute these notebooks with the project wheel as a
-dependency. Engineers can also open them from a Databricks Git Folder and run
-one cell at a time for demonstrations and troubleshooting.
+Engineers open these notebooks from a Databricks Git Folder and run one cell at
+a time for demonstrations and troubleshooting. Automated Bundle Jobs execute
+thin Python entry points from `scripts/`; both interfaces call the same modules
+under `src/`.
+
+## Job execution model
+
+The four Jobs are Python script tasks. Each run checks out the configured
+GitHub branch and executes one file from `scripts/`. The scripts only expose a
+command-line entry point; pipeline logic remains in `src/finops_cloud`.
+
+The Bundle deploys Job configuration, parameters, and runtime dependencies. It
+does not package the project into a wheel for these Jobs.
 
 ## Architecture
 

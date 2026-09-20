@@ -4,17 +4,13 @@ bundle:
 include:
   - resources/*.yml
 
-artifacts:
-  default:
-    type: whl
-    build: uv build --wheel
-    dynamic_version: true
-    path: .
-
 variables:
   environment:
     description: Logical configuration target
     default: dev
+  git_branch:
+    description: Git branch used by Databricks Python script tasks
+    default: main
 
 targets:
   dev:
