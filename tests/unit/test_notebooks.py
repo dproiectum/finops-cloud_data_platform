@@ -41,6 +41,10 @@ class NotebookTests(unittest.TestCase):
         self.assertEqual(jobs.count("git_source:"), 4)
         self.assertNotIn("notebook_task:", jobs)
         self.assertNotIn("python_wheel_task:", jobs)
+        self.assertIn(
+            "default: /Volumes/finops_dev/raw/focus/daily/2025/01/2025-01-01.parquet",
+            jobs,
+        )
 
     def test_python_script_entry_points_call_maintained_modules(self):
         expected = {
