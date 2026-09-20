@@ -29,5 +29,6 @@ def get_spark(profile: str | None = None):
 
 
 def ensure_schemas(spark, config) -> None:
+    """Create every configured medallion and operations schema if absent."""
     for schema in config.schemas.values():
         spark.sql(f"CREATE SCHEMA IF NOT EXISTS `{config.catalog}`.`{schema}`")

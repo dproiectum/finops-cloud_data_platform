@@ -7,6 +7,7 @@ from typing import Any
 
 
 def load_contract(path: Path) -> dict[str, Any]:
+    """Load the versioned YAML Data Contract and validate its basic structure."""
     import yaml
 
     payload = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -82,6 +83,7 @@ def apply_focus_contract(frame, contract_path: Path, currency: str, provider: st
 
 
 def validate_single_month(frame, month: str) -> None:
+    """Require an authoritative billing DataFrame to contain exactly one month."""
     from pyspark.sql import functions as F
 
     expected = f"{month}-01"

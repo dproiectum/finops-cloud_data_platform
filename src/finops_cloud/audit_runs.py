@@ -13,10 +13,12 @@ status string, started_at timestamp, finished_at timestamp, message string
 
 
 def utc_timestamp():
+    """Return a timezone-normalized UTC timestamp accepted by Spark."""
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def start_run(spark, config, pipeline_name: str, month: str | None = None) -> str:
+    """Create a RUNNING pipeline audit row and return its unique run ID."""
     run_id = uuid4().hex
     values = (
         run_id,
@@ -35,6 +37,7 @@ def start_run(spark, config, pipeline_name: str, month: str | None = None) -> st
 
 
 def finish_run(spark, config, run_id: str, status: str, message: str | None = None) -> None:
+    """Finalize one pipeline audit row with status, time, and safe message."""
     escaped = (message or "").replace("'", "''")[:4000]
     spark.sql(
         f"""
@@ -46,6 +49,7 @@ def finish_run(spark, config, run_id: str, status: str, message: str | None = No
 
 
 def set_month_status(spark, config, month: str, status: str, source: str, run_id: str) -> None:
+    """Upsert the authoritative processing status for one billing month."""
     table = config.table("month_status", "ops")
     spark.sql(
         f"""

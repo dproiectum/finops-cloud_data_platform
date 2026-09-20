@@ -8,7 +8,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from finops_cloud.config import load_config  # noqa: E402
 from finops_cloud.sql_runner import placeholders, render_sql, sql_text, table_context  # noqa: E402
-from finops_cloud.transformations.gold import (  # noqa: E402
+from finops_cloud.gold import (  # noqa: E402
     DATAMART_SCRIPTS,
     GOLD_DDL,
     GOLD_LOAD_SCRIPTS,

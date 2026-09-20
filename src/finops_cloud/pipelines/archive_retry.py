@@ -5,14 +5,15 @@ from __future__ import annotations
 import argparse
 import json
 
-from finops_cloud.archive.gcs_archive import archive_month, write_archive_audit
-from finops_cloud.audit.month_snapshot import ensure_audit_tables
-from finops_cloud.audit.run_log import finish_run, set_month_status, start_run
+from finops_cloud.archive import archive_month, write_archive_audit
+from finops_cloud.audit_runs import finish_run, set_month_status, start_run
+from finops_cloud.audit_snapshots import ensure_audit_tables
 from finops_cloud.config import load_config
 from finops_cloud.runtime import ensure_schemas, get_spark
 
 
 def run(environment: str, month: str):
+    """Retry GCS archival for a loaded month without reloading Delta tables."""
     config = load_config(environment)
     spark = get_spark(config.profile)
     ensure_schemas(spark, config)
@@ -30,6 +31,7 @@ def run(environment: str, month: str):
 
 
 def main() -> None:
+    """Parse Python Script Task arguments and run an archive retry."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--environment", choices=("dev", "prod"), required=True)
     parser.add_argument("--month", required=True)

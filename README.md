@@ -27,6 +27,21 @@ command-line entry point; pipeline logic remains in `src/finops_cloud`.
 The Bundle deploys Job configuration, parameters, and runtime dependencies. It
 does not package the project into a wheel for these Jobs.
 
+## Python source layout
+
+`src/finops_cloud` is deliberately organized around the processing flow:
+
+- `contract.py`: FOCUS Data Contract loading, casts, and blocking checks;
+- `delta.py`: idempotent append and atomic monthly replacement primitives;
+- `silver.py`: canonical Silver metadata and month controls;
+- `gold.py`: execution order for Gold SQL and datamart refresh;
+- `audit_runs.py` and `audit_snapshots.py`: operational traceability;
+- `archive.py`: verified and resumable GCS archival;
+- `pipelines/`: end-to-end daily, monthly, backfill, and archive orchestration;
+- `config.py`, `runtime.py`, and `sql_runner.py`: shared platform utilities.
+
+Every function has an English docstring describing its responsibility.
+
 ## Architecture
 
 ```text

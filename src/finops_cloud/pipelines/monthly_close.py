@@ -6,25 +6,25 @@ import argparse
 import json
 import re
 
-from finops_cloud.archive.gcs_archive import archive_month, write_archive_audit
-from finops_cloud.audit.month_snapshot import (
+from finops_cloud.archive import archive_month, write_archive_audit
+from finops_cloud.audit_runs import finish_run, set_month_status, start_run
+from finops_cloud.audit_snapshots import (
     capture_frame_state,
     ensure_audit_tables,
     write_reconciliation,
     write_snapshot,
 )
-from finops_cloud.audit.run_log import finish_run, set_month_status, start_run
 from finops_cloud.config import load_config
-from finops_cloud.loaders.delta import (
+from finops_cloud.contract import apply_focus_contract, validate_single_month
+from finops_cloud.delta import (
     append_new_source_files,
     delta_version,
     replace_month,
     table_exists,
 )
-from finops_cloud.quality.focus_contract import apply_focus_contract, validate_single_month
+from finops_cloud.gold import refresh_gold_for_month
 from finops_cloud.runtime import ensure_schemas, get_spark
-from finops_cloud.transformations.gold import refresh_gold_for_month
-from finops_cloud.transformations.silver import (
+from finops_cloud.silver import (
     add_ingestion_metadata,
     month_frame,
     prepare_canonical,
@@ -32,17 +32,20 @@ from finops_cloud.transformations.silver import (
 
 
 def _validate_month(month: str) -> None:
+    """Require a safe YYYY-MM monthly-close parameter."""
     if not re.fullmatch(r"[0-9]{4}-(0[1-9]|1[0-2])", month):
         raise ValueError("month must use YYYY-MM")
 
 
 def _month_status(spark, config, month: str) -> str | None:
+    """Read the latest processing status for a billing month, when present."""
     table = config.table("month_status", "ops")
     rows = spark.table(table).where(f"billing_month = '{month}'").select("status").take(1)
     return rows[0]["status"] if rows else None
 
 
 def _archive_only(spark, config, month: str, run_id: str) -> dict[str, object]:
+    """Resume only archival after data loading previously completed."""
     records = archive_month(config, month)
     write_archive_audit(spark, config, run_id, month, records)
     set_month_status(spark, config, month, "CLOSED", "MONTHLY_BILLING", run_id)
@@ -56,6 +59,7 @@ def run(
     source_uri: str | None = None,
     archive: bool = True,
 ) -> dict[str, object]:
+    """Replace one month with billing data, reconcile it, and archive sources."""
     _validate_month(month)
     config = load_config(environment)
     spark = get_spark(config.profile)
@@ -182,6 +186,7 @@ def run(
 
 
 def main() -> None:
+    """Parse Python Script Task arguments and run the monthly-close pipeline."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--environment", choices=("dev", "prod"), required=True)
     parser.add_argument("--month", required=True)

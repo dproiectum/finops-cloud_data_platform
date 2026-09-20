@@ -6,10 +6,11 @@ import argparse
 from datetime import date
 import json
 
-from finops_cloud.jobs.monthly_close import run as close_month
+from finops_cloud.pipelines.monthly_close import run as close_month
 
 
 def month_range(start_month: str, end_month: str) -> list[str]:
+    """Return every YYYY-MM value in an inclusive chronological range."""
     start_year, start_number = map(int, start_month.split("-"))
     end_year, end_number = map(int, end_month.split("-"))
     start = date(start_year, start_number, 1)
@@ -29,6 +30,7 @@ def month_range(start_month: str, end_month: str) -> list[str]:
 
 
 def run(environment: str, start_month: str, end_month: str, archive: bool = True):
+    """Run the authoritative monthly close sequentially for historical months."""
     results = []
     for month in month_range(start_month, end_month):
         results.append(close_month(environment, month, archive=archive))
@@ -36,6 +38,7 @@ def run(environment: str, start_month: str, end_month: str, archive: bool = True
 
 
 def main() -> None:
+    """Parse Python Script Task arguments and run the billing backfill."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--environment", choices=("dev", "prod"), required=True)
     parser.add_argument("--start-month", required=True)

@@ -7,6 +7,7 @@ from typing import Any
 
 
 def _storage_client(config):
+    """Create a GCS client using a Databricks credential or local ADC."""
     try:
         from google.cloud import storage
     except ImportError as exc:
@@ -31,6 +32,7 @@ def _storage_client(config):
 
 
 def _record(bucket_name: str, source_name: str, destination, status: str):
+    """Build one normalized archive-audit record from a copied GCS object."""
     return {
         "source_uri": f"gs://{bucket_name}/{source_name}",
         "archive_uri": f"gs://{bucket_name}/{destination.name}",
@@ -45,6 +47,7 @@ def _record(bucket_name: str, source_name: str, destination, status: str):
 
 
 def _move_one(bucket, source, destination_name: str) -> dict[str, Any]:
+    """Copy, verify, and generation-safely delete one active GCS object."""
     source.reload()
     source_generation = source.generation
     destination = bucket.blob(destination_name)
@@ -131,6 +134,7 @@ def archive_month(config, month: str, client=None) -> list[dict[str, Any]]:
 
 
 def write_archive_audit(spark, config, run_id: str, month: str, records) -> None:
+    """Append verified GCS archive results to the operations audit table."""
     schema = """
       run_id string, billing_month string, source_uri string, archive_uri string,
       source_generation string, archive_generation string, crc32c string,

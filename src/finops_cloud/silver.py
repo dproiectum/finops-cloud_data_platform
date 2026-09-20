@@ -4,6 +4,7 @@ from __future__ import annotations
 
 
 def add_ingestion_metadata(frame, run_id: str, source_type: str, data_status: str):
+    """Add source lineage, run, ingestion-time, and provisional/final metadata."""
     from pyspark.sql import functions as F
 
     return (
@@ -18,6 +19,7 @@ def add_ingestion_metadata(frame, run_id: str, source_type: str, data_status: st
 
 
 def prepare_canonical(frame, contract_version: str):
+    """Add canonical Silver columns after Data Contract validation succeeds."""
     from pyspark.sql import functions as F
 
     return (
@@ -30,6 +32,7 @@ def prepare_canonical(frame, contract_version: str):
 
 
 def month_frame(frame, month: str):
+    """Filter a canonical DataFrame to one YYYY-MM billing period."""
     from pyspark.sql import functions as F
 
     return frame.filter(
@@ -38,6 +41,7 @@ def month_frame(frame, month: str):
 
 
 def assert_month_is_open(spark, config, frame) -> None:
+    """Prevent daily data from modifying months already closed by billing."""
     from pyspark.sql import functions as F
 
     status_table = config.table("month_status", "ops")

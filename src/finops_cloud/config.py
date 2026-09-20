@@ -40,6 +40,7 @@ def _resource_file(project_root: Path, relative_path: Path) -> Path:
 
 
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    """Recursively merge environment overrides into common configuration."""
     result = dict(base)
     for key, value in override.items():
         if isinstance(value, dict) and isinstance(result.get(key), dict):
@@ -50,6 +51,7 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
 
 
 def _read_toml(path: Path) -> dict[str, Any]:
+    """Read one TOML file and require a mapping at its root."""
     if not path.is_file():
         raise FileNotFoundError(f"Configuration file not found: {path}")
     with path.open("rb") as stream:
@@ -86,12 +88,15 @@ class PlatformConfig:
     amount_tolerance: str
 
     def schema(self, layer: str) -> str:
+        """Return a fully qualified Unity Catalog schema for a logical layer."""
         return f"{self.catalog}.{self.schemas[layer]}"
 
     def table(self, key: str, layer: str) -> str:
+        """Return a fully qualified table name from a configured table key."""
         return f"{self.schema(layer)}.{self.tables[key]}"
 
     def daily_volume_uri(self, day: str) -> str:
+        """Build the External Volume URI for one YYYY-MM-DD daily file."""
         relative = self.daily_path_template.format(
             year=day[:4],
             month=day[5:7],
@@ -102,6 +107,7 @@ class PlatformConfig:
         return f"{self.source_volume}/{relative.lstrip('/')}"
 
     def billing_volume_uri(self, month: str) -> str:
+        """Build the External Volume URI for one YYYY-MM billing file."""
         relative = self.billing_path_template.format(
             year=month[:4],
             month=month[5:7],
@@ -110,12 +116,14 @@ class PlatformConfig:
         return f"{self.source_volume}/{relative.lstrip('/')}"
 
     def daily_gcs_month_prefix(self, month: str) -> str:
+        """Build the active GCS prefix containing all daily files for a month."""
         relative = self.daily_month_prefix_template.format(
             year=month[:4], month=month[5:7], billing_month=month
         )
         return f"{self.active_prefix}/{relative.lstrip('/')}"
 
     def billing_gcs_object(self, month: str) -> str:
+        """Build the active GCS object name for an authoritative billing month."""
         relative = self.billing_path_template.format(
             year=month[:4], month=month[5:7], billing_month=month
         )
@@ -123,6 +131,7 @@ class PlatformConfig:
 
 
 def load_config(environment: str, root: Path | None = None) -> PlatformConfig:
+    """Load, merge, override, and validate configuration for DEV or PROD."""
     project_root = root or PROJECT_ROOT
     common = _read_toml(_resource_file(project_root, Path("config/common.toml")))
     selected = _read_toml(
@@ -165,6 +174,7 @@ def load_config(environment: str, root: Path | None = None) -> PlatformConfig:
 
 
 def validate_config(config: PlatformConfig) -> None:
+    """Fail fast when mandatory schemas, tables, or contract files are missing."""
     if config.environment not in {"dev", "prod"}:
         raise ValueError("environment must be dev or prod")
     if not config.catalog or not config.gcs_bucket:

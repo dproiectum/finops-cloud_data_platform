@@ -7,6 +7,7 @@ from uuid import uuid4
 
 
 def table_exists(spark, table_name: str) -> bool:
+    """Return whether a Unity Catalog table is available to the Spark session."""
     return bool(spark.catalog.tableExists(table_name))
 
 
@@ -36,6 +37,7 @@ def append_new_source_files(spark, frame, table_name: str) -> int:
 
 
 def append_frame(frame, table_name: str) -> int:
+    """Append a non-empty DataFrame to a Delta table and return its row count."""
     if frame.limit(1).count() == 0:
         return 0
     rows = frame.count()
@@ -49,10 +51,12 @@ def append_frame(frame, table_name: str) -> int:
 
 
 def _safe_view(prefix: str) -> str:
+    """Create a unique SQL-safe temporary-view name for one operation."""
     return re.sub(r"[^a-zA-Z0-9_]", "_", f"{prefix}_{uuid4().hex}")
 
 
 def align_to_target(spark, frame, table_name: str):
+    """Reorder a DataFrame to the target schema and reject implicit drift."""
     if not table_exists(spark, table_name):
         return frame
     target_fields = spark.table(table_name).schema.fields
@@ -94,6 +98,7 @@ def replace_month(spark, frame, table_name: str, month: str) -> int:
 
 
 def delta_version(spark, table_name: str) -> int | None:
+    """Return the latest Delta table version, or None when the table is absent."""
     if not table_exists(spark, table_name):
         return None
     row = spark.sql(f"DESCRIBE HISTORY {table_name} LIMIT 1").first()

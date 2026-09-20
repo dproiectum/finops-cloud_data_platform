@@ -5,14 +5,14 @@ from __future__ import annotations
 import argparse
 import json
 
-from finops_cloud.audit.month_snapshot import ensure_audit_tables
-from finops_cloud.audit.run_log import finish_run, set_month_status, start_run
+from finops_cloud.audit_runs import finish_run, set_month_status, start_run
+from finops_cloud.audit_snapshots import ensure_audit_tables
 from finops_cloud.config import load_config
-from finops_cloud.loaders.delta import append_new_source_files
-from finops_cloud.quality.focus_contract import apply_focus_contract
+from finops_cloud.contract import apply_focus_contract
+from finops_cloud.delta import append_new_source_files
+from finops_cloud.gold import refresh_gold_for_month
 from finops_cloud.runtime import ensure_schemas, get_spark
-from finops_cloud.transformations.gold import refresh_gold_for_month
-from finops_cloud.transformations.silver import (
+from finops_cloud.silver import (
     add_ingestion_metadata,
     assert_month_is_open,
     month_frame,
@@ -21,6 +21,7 @@ from finops_cloud.transformations.silver import (
 
 
 def run(environment: str, source_uri: str) -> dict[str, object]:
+    """Process one daily Parquet through Bronze, Silver, Gold, and datamarts."""
     if not source_uri:
         raise ValueError("source_uri is required")
     config = load_config(environment)
@@ -74,6 +75,7 @@ def run(environment: str, source_uri: str) -> dict[str, object]:
 
 
 def main() -> None:
+    """Parse Python Script Task arguments and run the daily pipeline."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--environment", choices=("dev", "prod"), required=True)
     parser.add_argument("--source-uri", required=True)

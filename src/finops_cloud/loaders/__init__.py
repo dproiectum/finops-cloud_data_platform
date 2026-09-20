@@ -1,1 +1,0 @@
-"""Delta loading primitives."""

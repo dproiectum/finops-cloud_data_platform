@@ -34,6 +34,7 @@ def _installed_sql_path(relative_path: Path) -> Path | None:
 
 
 def sql_text(relative_path: str) -> str:
+    """Read a safe project-relative SQL template from source or a wheel."""
     requested = Path(relative_path)
     if requested.is_absolute() or ".." in requested.parts:
         raise ValueError(f"SQL path must be relative to the SQL root: {relative_path}")
@@ -53,6 +54,7 @@ def sql_text(relative_path: str) -> str:
 
 
 def placeholders(template: str) -> set[str]:
+    """Return the format-variable names required by a SQL template."""
     return {
         field_name
         for _literal, field_name, _format_spec, _conversion in Formatter().parse(template)
@@ -61,6 +63,7 @@ def placeholders(template: str) -> set[str]:
 
 
 def render_sql(relative_path: str, values: Mapping[str, str]) -> str:
+    """Render one SQL template after checking that every variable is supplied."""
     template = sql_text(relative_path)
     missing = placeholders(template) - set(values)
     if missing:
@@ -74,6 +77,7 @@ def split_statements(script: str) -> list[str]:
 
 
 def execute_sql_file(spark, relative_path: str, values: Mapping[str, str]) -> int:
+    """Render and execute all statements in one SQL file, preserving order."""
     rendered = render_sql(relative_path, values)
     statements = split_statements(rendered)
     for statement in statements:

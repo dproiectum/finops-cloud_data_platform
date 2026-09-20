@@ -39,15 +39,18 @@ DATAMART_SCRIPTS = tuple(
 
 
 def _validate_month(month: str) -> None:
+    """Validate the YYYY-MM value injected into month-scoped Gold SQL."""
     if not re.fullmatch(r"[0-9]{4}-(0[1-9]|1[0-2])", month):
         raise ValueError("month must use YYYY-MM")
 
 
 def ensure_gold_tables(spark, config) -> None:
+    """Run the idempotent DDL that creates the Gold star schema tables."""
     execute_sql_file(spark, GOLD_DDL, table_context(config))
 
 
 def refresh_datamarts(spark, config) -> None:
+    """Rebuild all certified datamart tables from Silver and Gold sources."""
     context = table_context(config)
     for relative_path in DATAMART_SCRIPTS:
         execute_sql_file(spark, relative_path, context)

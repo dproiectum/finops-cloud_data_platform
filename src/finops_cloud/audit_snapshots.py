@@ -29,6 +29,7 @@ captured_at timestamp
 
 
 def ensure_audit_tables(spark, config) -> None:
+    """Create all Delta tables required for run, month, and archive auditing."""
     pipeline_run = config.table("pipeline_run", "ops")
     month_snapshot = config.table("month_snapshot", "ops")
     reconciliation = config.table("reconciliation", "ops")
@@ -107,21 +108,25 @@ def capture_frame_state(
     source_type: str,
     delta_version: int | None = None,
 ) -> dict[str, Any]:
+    """Calculate reproducible row, cost, quality, and date metrics for a stage."""
     from pyspark.sql import functions as F
 
     columns = set(frame.columns)
 
     def amount(column: str):
+        """Return a decimal sum expression or a typed null when unavailable."""
         if column in columns:
             return F.sum(F.col(column).cast("decimal(38,6)"))
         return F.lit(None).cast("decimal(38,6)")
 
     def distinct(column: str):
+        """Return a distinct-count expression or zero when unavailable."""
         if column in columns:
             return F.countDistinct(F.col(column))
         return F.lit(0).cast("long")
 
     def timestamp_metric(column: str, function):
+        """Apply a timestamp aggregation or return a typed null expression."""
         if column in columns:
             return function(F.col(column).cast("timestamp"))
         return F.lit(None).cast("timestamp")
@@ -189,6 +194,7 @@ def capture_frame_state(
 
 
 def write_snapshot(spark, config, snapshot: dict[str, Any]) -> None:
+    """Append one BEFORE, SOURCE, or AFTER metric snapshot to Delta."""
     ordered = [item.strip().split()[0] for item in SNAPSHOT_SCHEMA.split(",")]
     values = tuple(snapshot[name] for name in ordered)
     spark.createDataFrame([values], SNAPSHOT_SCHEMA).write.mode("append").saveAsTable(
@@ -197,6 +203,7 @@ def write_snapshot(spark, config, snapshot: dict[str, Any]) -> None:
 
 
 def write_reconciliation(spark, config, run_id, month, before, source, after) -> str:
+    """Persist and enforce the technical reconciliation after monthly replace."""
     billed_difference = source["billed_cost_total"] - before["billed_cost_total"]
     technical_difference = after["billed_cost_total"] - source["billed_cost_total"]
     passed = (
