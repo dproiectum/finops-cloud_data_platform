@@ -4,10 +4,13 @@ Ce dossier est la source de vérité de tous les scripts SQL du projet :
 
 - `infrastructure/` : objets administratifs Unity Catalog et GCS, exécutés
   manuellement avant le premier déploiement
-- `gold/` : DDL et chargements du modèle en étoile
-- `datamarts/` : création des quatorze tables analytiques
+- `gold/table_creation/` : DDL idempotent des dimensions, de la table de faits
+  et de la table de pont
+- `gold/data_loading/` : chargement des dimensions, tags et faits
+- `datamarts/table_refresh/` : transformation puis création ou remplacement
+  des quatorze tables analytiques
 
-Les scripts `gold/` et `datamarts/` sont lus dynamiquement par
+Ces scripts sont lus dynamiquement par
 `src/finops_cloud/sql_runner.py`, puis exécutés par `spark.sql()`. La
 configuration de packaging les ajoute aussi à la wheel Databricks comme
 fichiers de données. Il n'existe donc pas de seconde copie sous `src/`.

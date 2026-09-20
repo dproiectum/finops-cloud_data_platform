@@ -7,6 +7,17 @@ avec un Databricks Asset Bundle.
 Le prototype historique reste dans `../FinOps Data Platform - POC`. Le dataset
 synthétique unique est produit par `../FinOps Data Generator`.
 
+## Notebooks Databricks
+
+Le dossier `notebooks/` fournit les interfaces interactives du projet. Chaque
+notebook sépare les paramètres, l'appel au pipeline Python et l'affichage des
+contrôles. La logique reste centralisée dans `src/` et `sql/`; elle n'est pas
+recopiée dans les cellules.
+
+Les quatre Jobs du Bundle exécutent ces notebooks avec la wheel du projet comme
+dépendance. Ils peuvent aussi être ouverts depuis un Git Folder et exécutés
+cellule par cellule pour une démonstration ou un diagnostic.
+
 ## Architecture
 
 ```text
@@ -45,8 +56,9 @@ datamarts. Les structures et transformations sont définies en SQL puis
 exécutées par PySpark.
 
 - Documentation : `docs/data_model.md`
-- DDL et chargements Gold : `sql/gold`
-- Datamarts : `sql/datamarts`
+- Création des tables Gold : `sql/gold/table_creation`
+- Chargements Gold : `sql/gold/data_loading`
+- Rafraîchissement des datamarts : `sql/datamarts/table_refresh`
 - Exécuteur commun : `src/finops_cloud/sql_runner.py`
 
 ## Zones à adapter

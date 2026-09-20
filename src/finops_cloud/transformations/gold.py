@@ -8,14 +8,14 @@ from uuid import uuid4
 from finops_cloud.sql_runner import execute_sql_file, table_context
 
 
-GOLD_DDL = "gold/00_create_gold_tables.sql"
+GOLD_DDL = "gold/table_creation/00_create_gold_tables.sql"
 GOLD_LOAD_SCRIPTS = (
-    "gold/10_merge_dimensions.sql",
-    "gold/20_merge_tags.sql",
-    "gold/30_replace_fact_month.sql",
+    "gold/data_loading/10_merge_dimensions.sql",
+    "gold/data_loading/20_merge_tags.sql",
+    "gold/data_loading/30_replace_fact_month.sql",
 )
 DATAMART_SCRIPTS = tuple(
-    f"datamarts/{index:02d}_{name}.sql"
+    f"datamarts/table_refresh/{index:02d}_{name}.sql"
     for index, name in enumerate(
         (
             "dm_monthly_billing",

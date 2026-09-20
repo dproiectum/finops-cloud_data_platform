@@ -8,14 +8,11 @@ resources:
       tasks:
         - task_key: daily_incremental
           environment_key: default
-          python_wheel_task:
-            package_name: finops_cloud
-            entry_point: finops_daily
-            parameters:
-              - --environment
-              - ${var.environment}
-              - --source-uri
-              - "{{job.parameters.source_uri}}"
+          notebook_task:
+            notebook_path: ../notebooks/01_daily_incremental.ipynb
+            base_parameters:
+              environment: ${var.environment}
+              source_uri: "{{job.parameters.source_uri}}"
       environments:
         - environment_key: default
           spec:
@@ -28,17 +25,20 @@ resources:
       parameters:
         - name: month
           default: ""
+        - name: source_uri
+          default: ""
+        - name: archive
+          default: "true"
       tasks:
         - task_key: monthly_close
           environment_key: default
-          python_wheel_task:
-            package_name: finops_cloud
-            entry_point: finops_monthly
-            parameters:
-              - --environment
-              - ${var.environment}
-              - --month
-              - "{{job.parameters.month}}"
+          notebook_task:
+            notebook_path: ../notebooks/02_monthly_close.ipynb
+            base_parameters:
+              environment: ${var.environment}
+              month: "{{job.parameters.month}}"
+              source_uri: "{{job.parameters.source_uri}}"
+              archive: "{{job.parameters.archive}}"
       environments:
         - environment_key: default
           spec:
@@ -53,19 +53,18 @@ resources:
           default: ""
         - name: end_month
           default: ""
+        - name: archive
+          default: "true"
       tasks:
         - task_key: billing_backfill
           environment_key: default
-          python_wheel_task:
-            package_name: finops_cloud
-            entry_point: finops_backfill
-            parameters:
-              - --environment
-              - ${var.environment}
-              - --start-month
-              - "{{job.parameters.start_month}}"
-              - --end-month
-              - "{{job.parameters.end_month}}"
+          notebook_task:
+            notebook_path: ../notebooks/03_billing_backfill.ipynb
+            base_parameters:
+              environment: ${var.environment}
+              start_month: "{{job.parameters.start_month}}"
+              end_month: "{{job.parameters.end_month}}"
+              archive: "{{job.parameters.archive}}"
       environments:
         - environment_key: default
           spec:
@@ -81,14 +80,11 @@ resources:
       tasks:
         - task_key: archive_retry
           environment_key: default
-          python_wheel_task:
-            package_name: finops_cloud
-            entry_point: finops_archive
-            parameters:
-              - --environment
-              - ${var.environment}
-              - --month
-              - "{{job.parameters.month}}"
+          notebook_task:
+            notebook_path: ../notebooks/04_archive_retry.ipynb
+            base_parameters:
+              environment: ${var.environment}
+              month: "{{job.parameters.month}}"
       environments:
         - environment_key: default
           spec:

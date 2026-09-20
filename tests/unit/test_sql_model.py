@@ -68,10 +68,17 @@ class SqlModelTests(unittest.TestCase):
             data_files["share/finops_cloud/contracts/focus_cost_usage/v1.0.0"],
             ["contracts/focus_cost_usage/v1.0.0/*.yaml"],
         )
-        self.assertEqual(data_files["share/finops_cloud/sql/gold"], ["sql/gold/*.sql"])
         self.assertEqual(
-            data_files["share/finops_cloud/sql/datamarts"],
-            ["sql/datamarts/*.sql"],
+            data_files["share/finops_cloud/sql/gold/table_creation"],
+            ["sql/gold/table_creation/*.sql"],
+        )
+        self.assertEqual(
+            data_files["share/finops_cloud/sql/gold/data_loading"],
+            ["sql/gold/data_loading/*.sql"],
+        )
+        self.assertEqual(
+            data_files["share/finops_cloud/sql/datamarts/table_refresh"],
+            ["sql/datamarts/table_refresh/*.sql"],
         )
 
 

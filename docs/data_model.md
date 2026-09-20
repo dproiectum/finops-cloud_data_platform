@@ -8,8 +8,9 @@ et les contrôles, tandis que Gold expose un modèle stable pour la BI.
 
 Le code SQL exécutable se trouve dans :
 
-- `sql/gold` pour les DDL et chargements Gold
-- `sql/datamarts` pour les 14 produits analytiques
+- `sql/gold/table_creation` pour le DDL Gold
+- `sql/gold/data_loading` pour les chargements Gold
+- `sql/datamarts/table_refresh` pour les 14 produits analytiques
 
 Ces fichiers sont la source de vérité du projet et sont embarqués comme données
 dans la wheel Python. PySpark les appelle dans l'ordre, mais ne redéfinit pas
