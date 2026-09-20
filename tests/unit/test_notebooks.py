@@ -8,8 +8,8 @@ ROOT = Path(__file__).resolve().parents[2]
 
 class NotebookTests(unittest.TestCase):
     def test_notebooks_are_clean_and_valid(self):
-        notebooks = sorted((ROOT / "notebooks").glob("*.ipynb"))
-        self.assertEqual(len(notebooks), 5)
+        notebooks = sorted((ROOT / "notebooks").rglob("*.ipynb"))
+        self.assertEqual(len(notebooks), 8)
         for path in notebooks:
             notebook = json.loads(path.read_text(encoding="utf-8"))
             self.assertEqual(notebook["nbformat"], 4)
@@ -25,10 +25,11 @@ class NotebookTests(unittest.TestCase):
 
     def test_pipeline_notebooks_call_maintained_job_modules(self):
         expected = {
-            "01_daily_incremental.ipynb": "finops_cloud.pipelines.daily_incremental import run",
-            "02_monthly_close.ipynb": "finops_cloud.pipelines.monthly_close import run",
-            "03_billing_backfill.ipynb": "finops_cloud.pipelines.billing_backfill import run",
-            "04_archive_retry.ipynb": "finops_cloud.pipelines.archive_retry import run",
+            "pipelines/01_daily_incremental.ipynb": "finops_cloud.pipelines.daily_incremental import run",
+            "pipelines/02_monthly_close.ipynb": "finops_cloud.pipelines.monthly_close import run",
+            "pipelines/03_billing_backfill.ipynb": "finops_cloud.pipelines.billing_backfill import run",
+            "operations/archive_retry.ipynb": "finops_cloud.pipelines.archive_retry import run",
+            "pipelines/00_all_monthly_to_gold.ipynb": "finops_cloud.pipelines.billing_backfill import run",
         }
         for name, import_line in expected.items():
             content = (ROOT / "notebooks" / name).read_text(encoding="utf-8")

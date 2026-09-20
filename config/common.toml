@@ -7,7 +7,7 @@ active_prefix = "focus"
 archive_prefix = "focus_archive"
 daily_path_template = "daily/year={year}/month={month}/day={day}/focus-{date}.parquet"
 daily_month_prefix_template = "daily/year={year}/month={month}/"
-billing_path_template = "monthly/year={year}/month={month}/billing-{billing_month}.parquet"
+billing_path_template = "monthly/billing-{billing_month}.parquet"
 archive_daily_after_month_close = true
 archive_billing_after_month_close = true
 

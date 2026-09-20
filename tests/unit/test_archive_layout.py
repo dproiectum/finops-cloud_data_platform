@@ -56,7 +56,7 @@ class FakeBucket:
 
 
 class ArchiveLayoutTests(unittest.TestCase):
-    def test_archive_preserves_dataset_partition_layout(self):
+    def test_archive_uses_partitioned_daily_and_flat_monthly_layouts(self):
         config = load_config("dev", ROOT)
         self.assertEqual(
             config.daily_gcs_month_prefix("2025-01"),
@@ -64,17 +64,15 @@ class ArchiveLayoutTests(unittest.TestCase):
         )
         self.assertEqual(
             config.billing_gcs_object("2025-01"),
-            "focus/monthly/year=2025/month=01/billing-2025-01.parquet",
+            "focus/monthly/billing-2025-01.parquet",
         )
 
     def test_corrected_billing_is_archived_as_a_revision(self):
         bucket = FakeBucket()
-        destination = (
-            "focus_archive/monthly/year=2025/month=01/billing-2025-01.parquet"
-        )
+        destination = "focus_archive/monthly/billing-2025-01.parquet"
         bucket.objects[destination] = FakeBlob(destination, crc32c="old", size=9)
         source = FakeBlob(
-            "focus/monthly/year=2025/month=01/billing-2025-01.parquet",
+            "focus/monthly/billing-2025-01.parquet",
             generation="42",
             crc32c="new",
             size=10,
@@ -82,7 +80,7 @@ class ArchiveLayoutTests(unittest.TestCase):
         result = _move_one(bucket, source, destination)
         self.assertEqual(
             result["archive_uri"],
-            "gs://dtl_finops/focus_archive/monthly/year=2025/month=01/"
+            "gs://dtl_finops/focus_archive/monthly/"
             "revision=42/billing-2025-01.parquet",
         )
         self.assertTrue(source.deleted)

@@ -20,7 +20,7 @@ class ConfigTests(unittest.TestCase):
         )
         self.assertEqual(
             config.billing_volume_uri("2026-07"),
-            "/Volumes/finops_dev/raw/focus/monthly/year=2026/month=07/billing-2026-07.parquet",
+            "/Volumes/finops_dev/raw/focus/monthly/billing-2026-07.parquet",
         )
         self.assertEqual(
             config.daily_gcs_month_prefix("2026-07"),
@@ -28,7 +28,7 @@ class ConfigTests(unittest.TestCase):
         )
         self.assertEqual(
             config.billing_gcs_object("2026-07"),
-            "focus/monthly/year=2026/month=07/billing-2026-07.parquet",
+            "focus/monthly/billing-2026-07.parquet",
         )
         self.assertEqual(
             config.table("silver_canonical", "silver"),

@@ -111,6 +111,8 @@ Storage Credential. The archival SDK uses a Unity Catalog Service Credential
 in Jobs or Application Default Credentials during controlled local tests.
 
 See `docs/databricks_gcs_setup.md` for the administrative setup procedure.
+See `docs/databricks_restart_job.md` for the conditional reset and full-load
+workflow configured through the Databricks interface.
 
 ## VS Code environment
 
