@@ -16,6 +16,7 @@ def append_new_source_files(spark, frame, table_name: str) -> int:
     if "_source_file" not in frame.columns:
         raise ValueError("_source_file is required for idempotent ingestion")
     candidate = frame
+    # Source-file lineage is the idempotency key for daily ingestion retries.
     if table_exists(spark, table_name):
         existing = spark.table(table_name).select("_source_file").distinct()
         candidate_files = frame.select("_source_file").distinct().join(
@@ -57,6 +58,7 @@ def _safe_view(prefix: str) -> str:
 
 def align_to_target(spark, frame, table_name: str):
     """Reorder a DataFrame to the target schema and reject implicit drift."""
+    # The first monthly load creates the table; later loads use replaceWhere.
     if not table_exists(spark, table_name):
         return frame
     target_fields = spark.table(table_name).schema.fields

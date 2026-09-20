@@ -32,6 +32,7 @@ def month_range(start_month: str, end_month: str) -> list[str]:
 def run(environment: str, start_month: str, end_month: str, archive: bool = True):
     """Run the authoritative monthly close sequentially for historical months."""
     results = []
+    # Reuse the tested monthly-close logic instead of duplicating transformations.
     for month in month_range(start_month, end_month):
         results.append(close_month(environment, month, archive=archive))
     return results
@@ -39,6 +40,7 @@ def run(environment: str, start_month: str, end_month: str, archive: bool = True
 
 def main() -> None:
     """Parse Python Script Task arguments and run the billing backfill."""
+    # The backfill range is supplied by Databricks Job parameters.
     parser = argparse.ArgumentParser()
     parser.add_argument("--environment", choices=("dev", "prod"), required=True)
     parser.add_argument("--start-month", required=True)

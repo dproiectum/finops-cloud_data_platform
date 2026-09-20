@@ -24,12 +24,17 @@ def run(environment: str, source_uri: str) -> dict[str, object]:
     """Process one daily Parquet through Bronze, Silver, Gold, and datamarts."""
     if not source_uri:
         raise ValueError("source_uri is required")
+
+    # 1. Load environment-specific settings and prepare shared platform objects.
     config = load_config(environment)
     spark = get_spark(config.profile)
     ensure_schemas(spark, config)
     ensure_audit_tables(spark, config)
+
+    # One run identifier links all data writes and audit records produced below.
     run_id = start_run(spark, config, "daily_incremental")
     try:
+        # 2. Bronze keeps source columns and adds technical ingestion metadata.
         raw = spark.read.parquet(source_uri)
         bronze = add_ingestion_metadata(raw, run_id, "DAILY", "PROVISIONAL")
         bronze_rows = append_new_source_files(
@@ -37,12 +42,16 @@ def run(environment: str, source_uri: str) -> dict[str, object]:
             bronze,
             config.table("bronze_daily", "bronze"),
         )
+
+        # 3. The Data Contract validates types and mandatory business fields.
         validated = apply_focus_contract(
             bronze,
             config.contract_path,
             config.currency,
             config.provider,
         )
+
+        # 4. Silver is the canonical FOCUS dataset for downstream consumers.
         canonical = prepare_canonical(validated, config.contract_version)
         assert_month_is_open(spark, config, canonical)
         silver_rows = append_new_source_files(
@@ -56,6 +65,7 @@ def run(environment: str, source_uri: str) -> dict[str, object]:
             config.table("silver_central", "silver"),
         )
 
+        # 5. Refresh affected months in Gold, then rebuild the datamarts.
         months = [row["billing_month"] for row in canonical.select("billing_month").distinct().collect()]
         silver_table = config.table("silver_canonical", "silver")
         for month in months:
@@ -76,6 +86,7 @@ def run(environment: str, source_uri: str) -> dict[str, object]:
 
 def main() -> None:
     """Parse Python Script Task arguments and run the daily pipeline."""
+    # Databricks Jobs passes these values as command-line parameters.
     parser = argparse.ArgumentParser()
     parser.add_argument("--environment", choices=("dev", "prod"), required=True)
     parser.add_argument("--source-uri", required=True)

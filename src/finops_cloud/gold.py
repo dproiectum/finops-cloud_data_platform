@@ -8,6 +8,7 @@ from uuid import uuid4
 from finops_cloud.sql_runner import execute_sql_file, table_context
 
 
+# Python orchestrates execution; SQL remains the source of truth for warehouse logic.
 GOLD_DDL = "gold/table_creation/00_create_gold_tables.sql"
 GOLD_LOAD_SCRIPTS = (
     "gold/data_loading/10_merge_dimensions.sql",
@@ -52,6 +53,7 @@ def ensure_gold_tables(spark, config) -> None:
 def refresh_datamarts(spark, config) -> None:
     """Rebuild all certified datamart tables from Silver and Gold sources."""
     context = table_context(config)
+    # Numeric filenames make execution order explicit and reproducible.
     for relative_path in DATAMART_SCRIPTS:
         execute_sql_file(spark, relative_path, context)
 
@@ -63,6 +65,7 @@ def refresh_gold_for_month(spark, config, month_frame, month: str) -> None:
         raise ValueError("Refusing to refresh Gold from an empty month")
 
     source_view = f"finops_gold_month_{uuid4().hex}"
+    # SQL scripts read this temporary view without knowing how Python built it.
     month_frame.createOrReplaceTempView(source_view)
     context = table_context(config)
     context.update(

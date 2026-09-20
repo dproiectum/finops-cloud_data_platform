@@ -61,12 +61,15 @@ def run(
 ) -> dict[str, object]:
     """Replace one month with billing data, reconcile it, and archive sources."""
     _validate_month(month)
+
+    # 1. Prepare configuration, Spark, schemas, audit tables, and run tracking.
     config = load_config(environment)
     spark = get_spark(config.profile)
     ensure_schemas(spark, config)
     ensure_audit_tables(spark, config)
     run_id = start_run(spark, config, "monthly_close", month)
 
+    # If loading succeeded previously, retry only the failed archive operation.
     if _month_status(spark, config, month) == "CLOSED_ARCHIVE_PENDING":
         try:
             return _archive_only(spark, config, month, run_id)
@@ -76,6 +79,7 @@ def run(
 
     source = source_uri or config.billing_volume_uri(month)
     try:
+        # 2. Land the authoritative monthly billing file in Bronze.
         raw = spark.read.parquet(source)
         bronze = add_ingestion_metadata(raw, run_id, "MONTHLY_BILLING", "FINAL")
         bronze_rows = append_new_source_files(
@@ -83,6 +87,8 @@ def run(
             bronze,
             config.table("bronze_billing", "bronze"),
         )
+
+        # 3. Enforce the Data Contract before entering canonical Silver.
         validated = apply_focus_contract(
             bronze,
             config.contract_path,
@@ -92,6 +98,7 @@ def run(
         validate_single_month(validated, month)
         candidate = prepare_canonical(validated, config.contract_version)
 
+        # 4. Capture DAILY and BILLING states before replacing the month.
         silver_table = config.table("silver_canonical", "silver")
         before_version = delta_version(spark, silver_table)
         before_frame = (
@@ -120,6 +127,7 @@ def run(
         write_snapshot(spark, config, billing)
         set_month_status(spark, config, month, "RECONCILING", "DAILY", run_id)
 
+        # 5. Atomically replace the provisional daily month in both Silver tables.
         replace_month(spark, candidate, silver_table, month)
         replace_month(
             spark,
@@ -127,6 +135,8 @@ def run(
             config.table("silver_central", "silver"),
             month,
         )
+
+        # 6. Verify that the stored result exactly matches the billing source.
         after_version = delta_version(spark, silver_table)
         after_frame = month_frame(spark.table(silver_table), month)
         after = capture_frame_state(
@@ -141,11 +151,13 @@ def run(
         write_snapshot(spark, config, after)
         write_reconciliation(spark, config, run_id, month, before, billing, after)
 
+        # 7. Refresh the dimensional Gold model and certified datamarts.
         refresh_gold_for_month(spark, config, after_frame, month)
         set_month_status(spark, config, month, "CLOSED_DATA_LOADED", "MONTHLY_BILLING", run_id)
 
         archive_objects = 0
         if archive:
+            # 8. Move processed source objects only after the data load succeeds.
             try:
                 records = archive_month(config, month)
                 write_archive_audit(spark, config, run_id, month, records)
@@ -187,6 +199,7 @@ def run(
 
 def main() -> None:
     """Parse Python Script Task arguments and run the monthly-close pipeline."""
+    # Databricks Jobs passes these values as command-line parameters.
     parser = argparse.ArgumentParser()
     parser.add_argument("--environment", choices=("dev", "prod"), required=True)
     parser.add_argument("--month", required=True)

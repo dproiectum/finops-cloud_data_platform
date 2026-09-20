@@ -14,12 +14,14 @@ from finops_cloud.runtime import ensure_schemas, get_spark
 
 def run(environment: str, month: str):
     """Retry GCS archival for a loaded month without reloading Delta tables."""
+    # This pipeline deliberately skips Bronze, Silver, and Gold data writes.
     config = load_config(environment)
     spark = get_spark(config.profile)
     ensure_schemas(spark, config)
     ensure_audit_tables(spark, config)
     run_id = start_run(spark, config, "archive_retry", month)
     try:
+        # Archival is idempotent: already moved objects are detected and audited.
         records = archive_month(config, month)
         write_archive_audit(spark, config, run_id, month, records)
         set_month_status(spark, config, month, "CLOSED", "MONTHLY_BILLING", run_id)
@@ -32,6 +34,7 @@ def run(environment: str, month: str):
 
 def main() -> None:
     """Parse Python Script Task arguments and run an archive retry."""
+    # Databricks Jobs passes the target environment and billing month here.
     parser = argparse.ArgumentParser()
     parser.add_argument("--environment", choices=("dev", "prod"), required=True)
     parser.add_argument("--month", required=True)

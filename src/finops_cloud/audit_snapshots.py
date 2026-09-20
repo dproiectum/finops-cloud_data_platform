@@ -30,6 +30,7 @@ captured_at timestamp
 
 def ensure_audit_tables(spark, config) -> None:
     """Create all Delta tables required for run, month, and archive auditing."""
+    # CREATE IF NOT EXISTS makes setup safe at the beginning of every run.
     pipeline_run = config.table("pipeline_run", "ops")
     month_snapshot = config.table("month_snapshot", "ops")
     reconciliation = config.table("reconciliation", "ops")
@@ -113,6 +114,8 @@ def capture_frame_state(
 
     columns = set(frame.columns)
 
+    # Optional metrics return typed defaults so older schemas remain measurable.
+
     def amount(column: str):
         """Return a decimal sum expression or a typed null when unavailable."""
         if column in columns:
@@ -163,6 +166,7 @@ def capture_frame_state(
         timestamp_metric("ChargePeriodEnd", F.max).alias("max_charge_period"),
     ).first()
 
+    # Duplicate charge IDs are useful but are not present in every source.
     duplicate_charge_ids = 0
     if "x_ChargeId" in columns:
         duplicate_charge_ids = (
@@ -206,6 +210,7 @@ def write_reconciliation(spark, config, run_id, month, before, source, after) ->
     """Persist and enforce the technical reconciliation after monthly replace."""
     billed_difference = source["billed_cost_total"] - before["billed_cost_total"]
     technical_difference = after["billed_cost_total"] - source["billed_cost_total"]
+    # Replacement passes only when stored rows match the authoritative source.
     passed = (
         after["row_count"] == source["row_count"]
         and abs(technical_difference) < Decimal(config.amount_tolerance)

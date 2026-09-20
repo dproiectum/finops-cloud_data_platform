@@ -22,6 +22,7 @@ def prepare_canonical(frame, contract_version: str):
     """Add canonical Silver columns after Data Contract validation succeeds."""
     from pyspark.sql import functions as F
 
+    # These columns make month filtering and contract lineage explicit.
     return (
         frame.withColumn(
             "billing_month",
@@ -44,6 +45,7 @@ def assert_month_is_open(spark, config, frame) -> None:
     """Prevent daily data from modifying months already closed by billing."""
     from pyspark.sql import functions as F
 
+    # A monthly billing close makes that month immutable to later daily loads.
     status_table = config.table("month_status", "ops")
     if not spark.catalog.tableExists(status_table):
         return

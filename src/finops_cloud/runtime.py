@@ -8,6 +8,7 @@ def get_spark(profile: str | None = None):
     try:
         from pyspark.sql import SparkSession
 
+        # Databricks Jobs already provide an active remote Spark session.
         active = SparkSession.getActiveSession()
         if active is not None:
             return active
@@ -22,6 +23,7 @@ def get_spark(profile: str | None = None):
             "version matching the target Runtime or run this code as a Databricks Job."
         ) from exc
 
+    # Local VS Code execution falls back to Databricks Connect.
     builder = DatabricksSession.builder
     if profile:
         builder = builder.profile(profile)
@@ -30,5 +32,6 @@ def get_spark(profile: str | None = None):
 
 def ensure_schemas(spark, config) -> None:
     """Create every configured medallion and operations schema if absent."""
+    # Idempotent DDL allows every pipeline to bootstrap its required schemas.
     for schema in config.schemas.values():
         spark.sql(f"CREATE SCHEMA IF NOT EXISTS `{config.catalog}`.`{schema}`")

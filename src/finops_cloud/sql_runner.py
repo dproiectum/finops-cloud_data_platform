@@ -39,6 +39,7 @@ def sql_text(relative_path: str) -> str:
     if requested.is_absolute() or ".." in requested.parts:
         raise ValueError(f"SQL path must be relative to the SQL root: {relative_path}")
 
+    # FINOPS_SQL_ROOT supports CI or alternative layouts without code changes.
     configured_root = os.getenv("FINOPS_SQL_ROOT")
     source_root = Path(configured_root).resolve() if configured_root else _PROJECT_ROOT / "sql"
     source_file = source_root / requested
@@ -78,6 +79,7 @@ def split_statements(script: str) -> list[str]:
 
 def execute_sql_file(spark, relative_path: str, values: Mapping[str, str]) -> int:
     """Render and execute all statements in one SQL file, preserving order."""
+    # Keep transformations in SQL while Python controls parameters and order.
     rendered = render_sql(relative_path, values)
     statements = split_statements(rendered)
     for statement in statements:
@@ -117,6 +119,7 @@ def table_context(config) -> dict[str, str]:
         "dm_cost_by_subscription_month": "datamart",
         "dm_cost_by_application_owner_month": "datamart",
     }
+    # Only configured table identifiers are allowed into SQL template placeholders.
     result = {key: config.table(key, layer) for key, layer in layers.items()}
     unsafe = {key: value for key, value in result.items() if not _SAFE_IDENTIFIER.fullmatch(value)}
     if unsafe:

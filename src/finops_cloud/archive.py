@@ -48,6 +48,7 @@ def _record(bucket_name: str, source_name: str, destination, status: str):
 
 def _move_one(bucket, source, destination_name: str) -> dict[str, Any]:
     """Copy, verify, and generation-safely delete one active GCS object."""
+    # GCS generations protect the move from concurrent source-file changes.
     source.reload()
     source_generation = source.generation
     destination = bucket.blob(destination_name)
@@ -75,6 +76,7 @@ def _move_one(bucket, source, destination_name: str) -> dict[str, Any]:
             result["source_generation"] = str(source_generation)
             return result
 
+    # GCS has no atomic move: copy, verify checksum/size, then delete the source.
     copied = bucket.copy_blob(
         source,
         bucket,
@@ -96,6 +98,7 @@ def archive_month(config, month: str, client=None) -> list[dict[str, Any]]:
     if client is None:
         client = _storage_client(config)
     bucket = client.bucket(config.gcs_bucket)
+    # Configuration decides whether daily, billing, or both source families move.
     source_prefixes: list[str] = []
     if config.archive_daily:
         source_prefixes.append(config.daily_gcs_month_prefix(month))

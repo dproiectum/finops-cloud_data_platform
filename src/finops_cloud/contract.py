@@ -21,6 +21,7 @@ def apply_focus_contract(frame, contract_path: Path, currency: str, provider: st
     from pyspark.sql import functions as F
     from pyspark.sql.types import DecimalType
 
+    # The YAML contract is the versioned source of truth for columns and types.
     contract = load_contract(contract_path)
     fields = contract["fields"]
     required = [field["name"] for field in fields if field.get("required")]
@@ -28,6 +29,7 @@ def apply_focus_contract(frame, contract_path: Path, currency: str, provider: st
     if missing:
         raise ValueError(f"Required FOCUS columns are missing: {missing}")
 
+    # Missing optional fields are created as null; required fields fail immediately.
     result = frame
     period_dates = {"BillingPeriodStart", "BillingPeriodEnd"}
     timestamps = {
@@ -55,6 +57,7 @@ def apply_focus_contract(frame, contract_path: Path, currency: str, provider: st
         else:
             result = result.withColumn(name, F.col(name).cast("string"))
 
+    # Blocking rules are evaluated before any data is written to Silver.
     blocking_conditions = []
     for field in fields:
         if field.get("nullable") is False and field["name"] in result.columns:
@@ -73,6 +76,7 @@ def apply_focus_contract(frame, contract_path: Path, currency: str, provider: st
             F.col("BillingPeriodStart") > F.col("BillingPeriodEnd"),
         ]
     )
+    # Combine all quality rules into one Spark filter to avoid repeated scans.
     invalid = blocking_conditions[0]
     for condition in blocking_conditions[1:]:
         invalid = invalid | condition

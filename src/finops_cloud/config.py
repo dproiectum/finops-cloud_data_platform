@@ -10,6 +10,7 @@ import tomllib
 from typing import Any
 
 
+# Default repository root used by local Python and Databricks Git execution.
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -133,12 +134,15 @@ class PlatformConfig:
 def load_config(environment: str, root: Path | None = None) -> PlatformConfig:
     """Load, merge, override, and validate configuration for DEV or PROD."""
     project_root = root or PROJECT_ROOT
+
+    # Common settings define the platform; dev/prod files override differences.
     common = _read_toml(_resource_file(project_root, Path("config/common.toml")))
     selected = _read_toml(
         _resource_file(project_root, Path(f"config/{environment}.toml"))
     )
     raw = _deep_merge(common, selected)
 
+    # Environment variables are optional last-mile overrides for CI/CD and Jobs.
     actual_environment = os.getenv("FINOPS_ENVIRONMENT", raw.get("environment", environment))
     databricks = raw["databricks"]
     storage = raw["storage"]
