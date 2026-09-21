@@ -52,6 +52,7 @@ class NotebookTests(unittest.TestCase):
         )
         self.assertIn("CREATE_EMPTY_TABLES", content)
         self.assertIn('ENVIRONMENT = \\"dev\\"', content)
+        self.assertNotIn("_create_empty_table =", content)
 
     def test_manual_monthly_notebooks_do_not_offer_archival(self):
         for name in (

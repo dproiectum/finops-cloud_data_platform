@@ -87,7 +87,8 @@ def _create_empty_table(spark, frame, table_name: str) -> None:
     if table_exists(spark, table_name):
         align_to_target(spark, empty_frame, table_name)
         return
-    empty_frame.write.format("delta").mode("errorifexists").saveAsTable(table_name)
+    # DataFrameWriterV2 is supported by Databricks Connect and Serverless.
+    empty_frame.writeTo(table_name).using("delta").create()
 
 
 def initialize_empty_tables(environment: str, sample_month: str) -> dict[str, object]:
