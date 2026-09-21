@@ -8,15 +8,24 @@ archive_prefix = "focus_archive"
 daily_path_template = "daily/year={year}/month={month}/day={day}/focus-{date}.parquet"
 daily_month_prefix_template = "daily/year={year}/month={month}/"
 billing_path_template = "monthly/billing-{billing_month}.parquet"
-archive_daily_after_month_close = true
-archive_billing_after_month_close = true
+archive_daily_after_month_close = false
+archive_billing_after_month_close = false
+
+[raw]
+catalog = "finops_raw"
+schema = "landing"
+source_volume = "/Volumes/finops_raw/landing/focus"
+archive_volume = "/Volumes/finops_raw/landing/focus_archive"
 
 [schemas]
 bronze = "bronze"
 silver = "silver"
 gold = "gold"
 datamart = "datamart"
-ops = "ops"
+
+[operations]
+catalog = "finops_ops"
+schema = "audit"
 
 [tables]
 bronze_daily = "focus_daily_raw"

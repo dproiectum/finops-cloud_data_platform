@@ -2,33 +2,38 @@
 
 ## Source authority
 
-- Daily files contain provisional data for an open month.
-- Monthly billing is the detailed and authoritative version of a closed month.
+- `finops_raw.landing` is the single immutable source namespace for DEV and
+  PROD.
+- Daily files are provisional while a month is open.
+- Monthly billing is detailed and authoritative for a closed month.
 - Daily and monthly sources are never added together in the fact table.
-- Monthly billing atomically replaces the same month in Silver and Gold.
+- Billing atomically replaces the same month in Silver and Gold.
+
+## Catalog isolation
+
+Business tables stay isolated in `finops_dev` and `finops_prod`. The
+environment-independent `finops_ops.audit` catalog stores monitoring evidence.
+Its five tables have an explicit `environment` column, and all lookups and
+writes are scoped to it.
+
+```text
+finops_raw.landing
+        ├── DEV → finops_dev.{bronze,silver,gold,datamart}
+        └── PROD → finops_prod.{bronze,silver,gold,datamart}
+
+DEV + PROD audits → finops_ops.audit
+```
 
 ## Retention
 
-- Active GCS files are archived only after the `AFTER` checks and analytical
-  product refresh complete successfully.
-- Raw/Bronze data and Delta history remain available.
-- GCS archival is idempotent and verifies generation, size, and CRC32C.
-- A corrected billing file that reuses an object name is preserved under
-  `revision=<generation>` instead of overwriting the previous archive.
-
-## Portability
-
-The Data Contract, configuration, and SQL models are independent of notebooks.
-Physical Delta, Unity Catalog, and GCS operations remain explicitly adapted to
-Databricks/GCP instead of being hidden behind a universal abstraction.
+RAW files stay in `gs://dtl_finops/focus`. Automatic archival is disabled in
+`config/common.toml`; otherwise a DEV close could remove the source before PROD
+processes it. The archival module remains available for a later retention policy
+that coordinates all consuming environments.
 
 ## Analytical model
 
-Gold preserves the complete POC star schema: ten dimensions, one resource/tag
-bridge, and `fact_finops_cost_usage`. The fourteen POC datamarts are also
-preserved. The model, grain, relationships, and source-schema limitations are
-documented in `data_model.md`.
-
-DDL and DML files are the model's source of truth. Python/PySpark loads the SQL
-files from the package, injects only qualified identifiers from validated TOML
-configuration, and controls their execution order.
+Gold contains ten dimensions, one resource/tag bridge, and
+`fact_finops_cost_usage`. Fourteen datamarts reproduce the analytical outputs.
+SQL owns physical structures and transformations; Python controls execution and
+passes validated identifiers.

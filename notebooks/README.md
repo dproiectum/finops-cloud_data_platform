@@ -1,24 +1,25 @@
 # Databricks notebooks
 
-These notebooks are interactive pipeline entry points. They define parameters,
-call maintained functions from `src/finops_cloud`, and display results. They do
-not duplicate Python business logic or SQL scripts.
+The notebooks expose parameters and call the maintained code under
+`src/finops_cloud`. They intentionally contain no duplicated transformation
+logic.
 
-### Pipelines
+## Pipelines
 
-- `pipelines/01_daily_incremental.ipynb`: daily ingestion
-- `pipelines/02_monthly_close.ipynb`: monthly replacement and close
-- `pipelines/03_billing_backfill.ipynb`: initial load for a range of billing months
-- `pipelines/00_all_monthly_to_gold.ipynb`: discover and process every uploaded monthly billing
+- `pipelines/01_daily_incremental.ipynb`: one provisional daily file;
+- `pipelines/02_monthly_close.ipynb`: one authoritative billing month;
+- `pipelines/03_billing_backfill.ipynb`: an inclusive monthly range. Use this
+  notebook for the initial/full monthly load instead of maintaining a duplicate
+  full-load notebook.
 
-### Operations
+## Operations
 
-- `operations/environment_check.ipynb`: catalog and volume checks
-- `operations/archive_retry.ipynb`: retry a pending GCS archive operation
-- `operations/check_tables_empty.ipynb`: publish the table empty/non-empty task value
-- `operations/reset_all_tables.ipynb`: protected reset without deleting GCS sources
+- `operations/environment_check.ipynb`: verify selected catalogs, schemas, and
+  source Volume before loading;
+- `operations/archive_retry.ipynb`: reserved for a future archival policy.
+  Automatic archival is currently disabled because RAW is consumed by DEV and
+  PROD.
 
-Databricks widgets expose runtime parameters for manual execution. Production
-Jobs use the corresponding Python entry points under `scripts/`. An engineer
-can edit notebook parameters and execute one cell at a time during a
-demonstration or investigation. Notebook outputs must not be stored in Git.
+Catalog creation, DEV reset, and validations are deliberately kept as visible
+SQL scripts under `sql/infrastructure` and `sql/maintenance`. Run them manually
+in a SQL Warehouse by following `docs/manual_platform_rebuild.md`.

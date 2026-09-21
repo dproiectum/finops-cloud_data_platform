@@ -5,19 +5,19 @@ from __future__ import annotations
 import argparse
 import json
 
-from finops_cloud.audit_runs import finish_run, set_month_status, start_run
-from finops_cloud.audit_snapshots import ensure_audit_tables
+from finops_cloud.audit.runs import finish_run, set_month_status, start_run
+from finops_cloud.audit.snapshots import ensure_audit_tables
 from finops_cloud.config import load_config
-from finops_cloud.contract import apply_focus_contract
-from finops_cloud.delta import append_new_source_files
-from finops_cloud.gold import refresh_gold_for_month
-from finops_cloud.runtime import ensure_schemas, get_spark
-from finops_cloud.silver import (
-    add_ingestion_metadata,
+from finops_cloud.medallion.bronze import add_ingestion_metadata
+from finops_cloud.medallion.contract import apply_focus_contract
+from finops_cloud.medallion.delta import append_new_source_files
+from finops_cloud.medallion.gold import refresh_gold_for_month
+from finops_cloud.medallion.silver import (
     assert_month_is_open,
     month_frame,
     prepare_canonical,
 )
+from finops_cloud.runtime import ensure_schemas, get_spark
 
 
 def run(environment: str, source_uri: str) -> dict[str, object]:
@@ -25,7 +25,7 @@ def run(environment: str, source_uri: str) -> dict[str, object]:
     if not source_uri:
         raise ValueError("source_uri is required")
 
-    # 1. Load environment-specific settings and prepare shared platform objects.
+    # 1. Load environment-specific settings and verify platform objects.
     config = load_config(environment)
     spark = get_spark(config.profile)
     ensure_schemas(spark, config)

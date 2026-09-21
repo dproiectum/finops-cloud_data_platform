@@ -1,22 +1,6 @@
-"""Common metadata and canonical Silver preparation."""
+"""Canonical Silver preparation and closed-month protection."""
 
 from __future__ import annotations
-
-
-def add_ingestion_metadata(frame, run_id: str, source_type: str, data_status: str):
-    """Add source lineage, run, ingestion-time, and provisional/final metadata."""
-    from pyspark.sql import functions as F
-
-    return (
-        # Unity Catalog/serverless exposes the source path through the hidden
-        # file metadata column; input_file_name() is not supported there.
-        frame.withColumn("_source_file", F.col("_metadata.file_path"))
-        .withColumn("_source_type", F.lit(source_type))
-        .withColumn("_ingestion_run_id", F.lit(run_id))
-        .withColumn("_ingested_at", F.current_timestamp())
-        .withColumn("_data_status", F.lit(data_status))
-    )
-
 
 def prepare_canonical(frame, contract_version: str):
     """Add canonical Silver columns after Data Contract validation succeeds."""
@@ -53,7 +37,13 @@ def assert_month_is_open(spark, config, frame) -> None:
         F.date_format(F.col("BillingPeriodStart"), "yyyy-MM").alias("billing_month")
     ).distinct()
     closed = (
-        months.join(spark.table(status_table), on="billing_month", how="inner")
+        months.join(
+            spark.table(status_table).where(
+                F.col("environment") == F.lit(config.environment)
+            ),
+            on="billing_month",
+            how="inner",
+        )
         .where(
             F.col("status").isin(
                 "CLOSED",

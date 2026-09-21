@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from uuid import uuid4
 
-from finops_cloud.sql_runner import execute_sql_file, table_context
+from finops_cloud.sql.runner import execute_sql_file, table_context
 
 
 # Python orchestrates execution; SQL remains the source of truth for warehouse logic.

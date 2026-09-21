@@ -1,4 +1,4 @@
-"""Configuration loading shared by VS Code, Databricks Connect and Jobs."""
+"""Configuration loading used by VS Code, Databricks Connect, and Jobs."""
 
 from __future__ import annotations
 
@@ -67,6 +67,10 @@ class PlatformConfig:
     environment: str
     profile: str
     catalog: str
+    raw_catalog: str
+    raw_schema: str
+    operations_catalog: str
+    operations_schema: str
     source_volume: str
     archive_volume: str
     gcs_service_credential: str | None
@@ -90,6 +94,8 @@ class PlatformConfig:
 
     def schema(self, layer: str) -> str:
         """Return a fully qualified Unity Catalog schema for a logical layer."""
+        if layer == "ops":
+            return f"{self.operations_catalog}.{self.operations_schema}"
         return f"{self.catalog}.{self.schemas[layer]}"
 
     def table(self, key: str, layer: str) -> str:
@@ -146,14 +152,24 @@ def load_config(environment: str, root: Path | None = None) -> PlatformConfig:
     actual_environment = os.getenv("FINOPS_ENVIRONMENT", raw.get("environment", environment))
     databricks = raw["databricks"]
     storage = raw["storage"]
+    raw_storage = raw["raw"]
+    operations = raw["operations"]
     contract = raw["contract"]
     quality = raw["quality"]
     config = PlatformConfig(
         environment=actual_environment,
         profile=os.getenv("FINOPS_DATABRICKS_PROFILE", databricks["profile"]),
         catalog=os.getenv("FINOPS_CATALOG", databricks["catalog"]),
-        source_volume=databricks["source_volume"],
-        archive_volume=databricks["archive_volume"],
+        raw_catalog=os.getenv("FINOPS_RAW_CATALOG", raw_storage["catalog"]),
+        raw_schema=os.getenv("FINOPS_RAW_SCHEMA", raw_storage["schema"]),
+        operations_catalog=os.getenv(
+            "FINOPS_OPERATIONS_CATALOG", operations["catalog"]
+        ),
+        operations_schema=os.getenv(
+            "FINOPS_OPERATIONS_SCHEMA", operations["schema"]
+        ),
+        source_volume=os.getenv("FINOPS_SOURCE_VOLUME", raw_storage["source_volume"]),
+        archive_volume=os.getenv("FINOPS_ARCHIVE_VOLUME", raw_storage["archive_volume"]),
         gcs_service_credential=databricks.get("gcs_service_credential"),
         gcp_project=databricks.get("gcp_project"),
         gcs_bucket=os.getenv("FINOPS_GCS_BUCKET", storage["gcs_bucket"]),
@@ -181,9 +197,19 @@ def validate_config(config: PlatformConfig) -> None:
     """Fail fast when mandatory schemas, tables, or contract files are missing."""
     if config.environment not in {"dev", "prod"}:
         raise ValueError("environment must be dev or prod")
-    if not config.catalog or not config.gcs_bucket:
-        raise ValueError("catalog and GCS bucket are required")
-    required_schemas = {"bronze", "silver", "gold", "datamart", "ops"}
+    if not all(
+        (
+            config.catalog,
+            config.raw_catalog,
+            config.raw_schema,
+            config.operations_catalog,
+            config.operations_schema,
+        )
+    ):
+        raise ValueError("data, raw, and operations namespaces are required")
+    if not config.gcs_bucket:
+        raise ValueError("GCS bucket is required")
+    required_schemas = {"bronze", "silver", "gold", "datamart"}
     missing_schemas = required_schemas - set(config.schemas)
     if missing_schemas:
         raise ValueError(f"Missing schema settings: {sorted(missing_schemas)}")

@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[2]
 class NotebookTests(unittest.TestCase):
     def test_notebooks_are_clean_and_valid(self):
         notebooks = sorted((ROOT / "notebooks").rglob("*.ipynb"))
-        self.assertEqual(len(notebooks), 8)
+        self.assertEqual(len(notebooks), 5)
         for path in notebooks:
             notebook = json.loads(path.read_text(encoding="utf-8"))
             self.assertEqual(notebook["nbformat"], 4)
@@ -29,7 +29,6 @@ class NotebookTests(unittest.TestCase):
             "pipelines/02_monthly_close.ipynb": "finops_cloud.pipelines.monthly_close import run",
             "pipelines/03_billing_backfill.ipynb": "finops_cloud.pipelines.billing_backfill import run",
             "operations/archive_retry.ipynb": "finops_cloud.pipelines.archive_retry import run",
-            "pipelines/00_all_monthly_to_gold.ipynb": "finops_cloud.pipelines.billing_backfill import run",
         }
         for name, import_line in expected.items():
             content = (ROOT / "notebooks" / name).read_text(encoding="utf-8")
@@ -43,7 +42,7 @@ class NotebookTests(unittest.TestCase):
         self.assertNotIn("notebook_task:", jobs)
         self.assertNotIn("python_wheel_task:", jobs)
         self.assertIn(
-            "default: /Volumes/finops_dev/raw/focus/daily/2025/01/2025-01-01.parquet",
+            "default: /Volumes/finops_raw/landing/focus/daily/year=2025/month=01/day=01/focus-2025-01-01.parquet",
             jobs,
         )
 

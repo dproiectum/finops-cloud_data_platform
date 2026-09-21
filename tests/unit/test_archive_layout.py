@@ -5,8 +5,8 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 
-from finops_cloud.archive import _move_one  # noqa: E402
 from finops_cloud.config import load_config  # noqa: E402
+from finops_cloud.storage.archive import _move_one  # noqa: E402
 
 
 class FakeBlob:

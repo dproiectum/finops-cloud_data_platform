@@ -29,7 +29,7 @@ def month_range(start_month: str, end_month: str) -> list[str]:
     return result
 
 
-def run(environment: str, start_month: str, end_month: str, archive: bool = True):
+def run(environment: str, start_month: str, end_month: str, archive: bool = False):
     """Run the authoritative monthly close sequentially for historical months."""
     results = []
     # Reuse the tested monthly-close logic instead of duplicating transformations.
@@ -45,13 +45,13 @@ def main() -> None:
     parser.add_argument("--environment", choices=("dev", "prod"), required=True)
     parser.add_argument("--start-month", required=True)
     parser.add_argument("--end-month", required=True)
-    parser.add_argument("--no-archive", action="store_true")
+    parser.add_argument("--archive", action="store_true")
     args = parser.parse_args()
     results = run(
         args.environment,
         args.start_month,
         args.end_month,
-        archive=not args.no_archive,
+        archive=args.archive,
     )
     print(json.dumps(results, indent=2))
 

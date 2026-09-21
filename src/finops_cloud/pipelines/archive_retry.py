@@ -5,11 +5,11 @@ from __future__ import annotations
 import argparse
 import json
 
-from finops_cloud.archive import archive_month, write_archive_audit
-from finops_cloud.audit_runs import finish_run, set_month_status, start_run
-from finops_cloud.audit_snapshots import ensure_audit_tables
+from finops_cloud.audit.runs import finish_run, set_month_status, start_run
+from finops_cloud.audit.snapshots import ensure_audit_tables
 from finops_cloud.config import load_config
 from finops_cloud.runtime import ensure_schemas, get_spark
+from finops_cloud.storage.archive import archive_month, write_archive_audit
 
 
 def run(environment: str, month: str):

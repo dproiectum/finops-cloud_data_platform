@@ -31,7 +31,11 @@ def get_spark(profile: str | None = None):
 
 
 def ensure_schemas(spark, config) -> None:
-    """Create every configured medallion and operations schema if absent."""
-    # Idempotent DDL allows every pipeline to bootstrap its required schemas.
-    for schema in config.schemas.values():
-        spark.sql(f"CREATE SCHEMA IF NOT EXISTS `{config.catalog}`.`{schema}`")
+    """Fail clearly when manually provisioned Unity Catalog schemas are absent."""
+    namespaces = [
+        (config.raw_catalog, config.raw_schema),
+        *((config.catalog, schema) for schema in config.schemas.values()),
+        (config.operations_catalog, config.operations_schema),
+    ]
+    for catalog, schema in namespaces:
+        spark.sql(f"DESCRIBE SCHEMA `{catalog}`.`{schema}`")

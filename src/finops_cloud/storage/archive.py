@@ -139,7 +139,8 @@ def archive_month(config, month: str, client=None) -> list[dict[str, Any]]:
 def write_archive_audit(spark, config, run_id: str, month: str, records) -> None:
     """Append verified GCS archive results to the operations audit table."""
     schema = """
-      run_id string, billing_month string, source_uri string, archive_uri string,
+      run_id string, environment string, billing_month string,
+      source_uri string, archive_uri string,
       source_generation string, archive_generation string, crc32c string,
       size_bytes long, archive_status string, archived_at timestamp,
       error_message string
@@ -147,6 +148,7 @@ def write_archive_audit(spark, config, run_id: str, month: str, records) -> None
     values = [
         (
             run_id,
+            config.environment,
             month,
             record["source_uri"],
             record["archive_uri"],

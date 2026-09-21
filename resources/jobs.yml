@@ -11,8 +11,8 @@ resources:
         git_branch: ${var.git_branch}
       parameters:
         - name: source_uri
-          # Safe demonstration default; override it from Run now for another day.
-          default: /Volumes/finops_dev/raw/focus/daily/2025/01/2025-01-01.parquet
+          # Safe example; override it from Run now for another day.
+          default: /Volumes/finops_raw/landing/focus/daily/year=2025/month=01/day=01/focus-2025-01-01.parquet
       tasks:
         - task_key: daily_incremental
           environment_key: default

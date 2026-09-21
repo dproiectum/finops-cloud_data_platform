@@ -1,21 +1,12 @@
 # SQL scripts
 
-This directory is the source of truth for all project SQL:
+- `infrastructure/`: numbered scripts run manually in a SQL Warehouse to
+  verify RAW, register `finops_raw`, create DEV schemas, and create OPS tables;
+- `maintenance/`: explicit DEV reset and read-only validation scripts;
+- `gold/table_creation/`: Gold dimensions, bridge, and fact DDL;
+- `gold/data_loading/`: month-scoped dimension, tag, and fact loading;
+- `datamarts/table_refresh/`: fourteen certified analytical tables.
 
-- `infrastructure/`: Unity Catalog and GCS administrative objects, executed
-  manually before the first deployment
-- `gold/table_creation/`: idempotent DDL for dimensions, the fact table, and
-  the bridge table
-- `gold/data_loading/`: dimension, tag, and fact loading
-- `datamarts/table_refresh/`: transformation followed by creation or
-  replacement of the fourteen analytical tables
-
-`src/finops_cloud/sql_runner.py` loads these files dynamically and executes
-them through `spark.sql()`. The packaging configuration also embeds them in the
-Databricks wheel as data files. There is no duplicate SQL copy under `src/`.
-
-During development, the runner automatically finds this root-level directory.
-`FINOPS_SQL_ROOT` can select another controlled path for testing without
-changing Python code.
-
-The model and execution order are documented in `../docs/data_model.md`.
+The transformation SQL is loaded by `src/finops_cloud/sql/runner.py`. The
+administration scripts remain directly visible for manual execution and are not
+silently run by a setup notebook.

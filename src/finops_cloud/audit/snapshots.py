@@ -10,6 +10,7 @@ from typing import Any
 SNAPSHOT_SCHEMA = """
 run_id string,
 pipeline_name string,
+environment string,
 billing_month string,
 capture_stage string,
 source_type string,
@@ -55,6 +56,7 @@ def ensure_audit_tables(spark, config) -> None:
         f"""
         CREATE TABLE IF NOT EXISTS {reconciliation} (
           run_id STRING,
+          environment STRING,
           billing_month STRING,
           before_rows BIGINT,
           billing_rows BIGINT,
@@ -72,6 +74,7 @@ def ensure_audit_tables(spark, config) -> None:
     spark.sql(
         f"""
         CREATE TABLE IF NOT EXISTS {month_status} (
+          environment STRING,
           billing_month STRING,
           status STRING,
           authoritative_source STRING,
@@ -84,6 +87,7 @@ def ensure_audit_tables(spark, config) -> None:
         f"""
         CREATE TABLE IF NOT EXISTS {file_archive} (
           run_id STRING,
+          environment STRING,
           billing_month STRING,
           source_uri STRING,
           archive_uri STRING,
@@ -104,6 +108,7 @@ def capture_frame_state(
     *,
     run_id: str,
     pipeline_name: str,
+    environment: str,
     month: str,
     stage: str,
     source_type: str,
@@ -179,6 +184,7 @@ def capture_frame_state(
     return {
         "run_id": run_id,
         "pipeline_name": pipeline_name,
+        "environment": environment,
         "billing_month": month,
         "capture_stage": stage,
         "source_type": source_type,
@@ -199,23 +205,15 @@ def capture_frame_state(
 
 def write_snapshot(spark, config, snapshot: dict[str, Any]) -> None:
     """Append one BEFORE, SOURCE, or AFTER metric snapshot to Delta."""
-    
-    #21/09/2026
-    #this line may be the root cause the the pipeline failing 
-    #ordered = [item.strip().split()[0] for item in SNAPSHOT_SCHEMA.split(",")]
-    
-    #suggestion from Genie Code of databrickswith their reason :
-    #Parse the snapshot schema by line, not by comma: this keeps decimal(38,6) intact and fixes the bad 6) key without changing pipeline logic.
+    # Parse by line so decimal(38,6) remains one type declaration.
     ordered = [
         line.strip().rstrip(",").split()[0]
         for line in SNAPSHOT_SCHEMA.strip().splitlines()
         if line.strip()
-        ]
-    
-    
+    ]
     values = tuple(snapshot[name] for name in ordered)
     spark.createDataFrame([values], SNAPSHOT_SCHEMA).write.mode("append").saveAsTable(
-        configfinops_dev.datamart.dm_cost_by_application_owner_month.table("month_snapshot", "ops")
+        config.table("month_snapshot", "ops")
     )
 
 
@@ -231,7 +229,7 @@ def write_reconciliation(spark, config, run_id, month, before, source, after) ->
     )
     status = "PASSED" if passed else "FAILED"
     schema = """
-      run_id string, billing_month string,
+      run_id string, environment string, billing_month string,
       before_rows long, billing_rows long, after_rows long,
       before_billed_cost decimal(38,6), billing_billed_cost decimal(38,6),
       after_billed_cost decimal(38,6), billing_daily_difference decimal(38,6),
@@ -239,6 +237,7 @@ def write_reconciliation(spark, config, run_id, month, before, source, after) ->
     """
     values = (
         run_id,
+        config.environment,
         month,
         before["row_count"],
         source["row_count"],

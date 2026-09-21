@@ -1,4 +1,4 @@
-"""Reconcile daily data with billing, atomically replace the month, then archive."""
+"""Reconcile daily data with billing and atomically replace the month."""
 
 from __future__ import annotations
 
@@ -6,29 +6,29 @@ import argparse
 import json
 import re
 
-from finops_cloud.archive import archive_month, write_archive_audit
-from finops_cloud.audit_runs import finish_run, set_month_status, start_run
-from finops_cloud.audit_snapshots import (
+from finops_cloud.audit.runs import finish_run, set_month_status, start_run
+from finops_cloud.audit.snapshots import (
     capture_frame_state,
     ensure_audit_tables,
     write_reconciliation,
     write_snapshot,
 )
 from finops_cloud.config import load_config
-from finops_cloud.contract import apply_focus_contract, validate_single_month
-from finops_cloud.delta import (
+from finops_cloud.medallion.bronze import add_ingestion_metadata
+from finops_cloud.medallion.contract import apply_focus_contract, validate_single_month
+from finops_cloud.medallion.delta import (
     append_new_source_files,
     delta_version,
     replace_month,
     table_exists,
 )
-from finops_cloud.gold import refresh_gold_for_month
-from finops_cloud.runtime import ensure_schemas, get_spark
-from finops_cloud.silver import (
-    add_ingestion_metadata,
+from finops_cloud.medallion.gold import refresh_gold_for_month
+from finops_cloud.medallion.silver import (
     month_frame,
     prepare_canonical,
 )
+from finops_cloud.runtime import ensure_schemas, get_spark
+from finops_cloud.storage.archive import archive_month, write_archive_audit
 
 
 def _validate_month(month: str) -> None:
@@ -40,7 +40,14 @@ def _validate_month(month: str) -> None:
 def _month_status(spark, config, month: str) -> str | None:
     """Read the latest processing status for a billing month, when present."""
     table = config.table("month_status", "ops")
-    rows = spark.table(table).where(f"billing_month = '{month}'").select("status").take(1)
+    rows = (
+        spark.table(table)
+        .where(
+            f"environment = '{config.environment}' AND billing_month = '{month}'"
+        )
+        .select("status")
+        .take(1)
+    )
     return rows[0]["status"] if rows else None
 
 
@@ -57,9 +64,9 @@ def run(
     environment: str,
     month: str,
     source_uri: str | None = None,
-    archive: bool = True,
+    archive: bool = False,
 ) -> dict[str, object]:
-    """Replace one month with billing data, reconcile it, and archive sources."""
+    """Replace one month with billing data and optionally archive sources."""
     _validate_month(month)
 
     # 1. Prepare configuration, Spark, schemas, audit tables, and run tracking.
@@ -68,9 +75,10 @@ def run(
     ensure_schemas(spark, config)
     ensure_audit_tables(spark, config)
     run_id = start_run(spark, config, "monthly_close", month)
+    archive_enabled = archive and (config.archive_daily or config.archive_billing)
 
     # If loading succeeded previously, retry only the failed archive operation.
-    if _month_status(spark, config, month) == "CLOSED_ARCHIVE_PENDING":
+    if archive_enabled and _month_status(spark, config, month) == "CLOSED_ARCHIVE_PENDING":
         try:
             return _archive_only(spark, config, month, run_id)
         except Exception as exc:
@@ -110,6 +118,7 @@ def run(
             before_frame,
             run_id=run_id,
             pipeline_name="monthly_close",
+            environment=config.environment,
             month=month,
             stage="BEFORE",
             source_type="DAILY",
@@ -119,6 +128,7 @@ def run(
             candidate,
             run_id=run_id,
             pipeline_name="monthly_close",
+            environment=config.environment,
             month=month,
             stage="SOURCE",
             source_type="MONTHLY_BILLING",
@@ -143,6 +153,7 @@ def run(
             after_frame,
             run_id=run_id,
             pipeline_name="monthly_close",
+            environment=config.environment,
             month=month,
             stage="AFTER",
             source_type="MONTHLY_BILLING",
@@ -156,7 +167,7 @@ def run(
         set_month_status(spark, config, month, "CLOSED_DATA_LOADED", "MONTHLY_BILLING", run_id)
 
         archive_objects = 0
-        if archive:
+        if archive_enabled:
             # 8. Move processed source objects only after the data load succeeds.
             try:
                 records = archive_month(config, month)
@@ -174,7 +185,7 @@ def run(
                 finish_run(spark, config, run_id, "ARCHIVE_PENDING", str(archive_error))
                 raise
 
-        final_status = "CLOSED" if archive else "CLOSED_DATA_LOADED"
+        final_status = "CLOSED" if archive_enabled else "CLOSED_DATA_LOADED"
         set_month_status(spark, config, month, final_status, "MONTHLY_BILLING", run_id)
         finish_run(spark, config, run_id, "SUCCESS")
         return {
@@ -204,13 +215,13 @@ def main() -> None:
     parser.add_argument("--environment", choices=("dev", "prod"), required=True)
     parser.add_argument("--month", required=True)
     parser.add_argument("--source-uri")
-    parser.add_argument("--no-archive", action="store_true")
+    parser.add_argument("--archive", action="store_true")
     args = parser.parse_args()
     result = run(
         args.environment,
         args.month,
         source_uri=args.source_uri,
-        archive=not args.no_archive,
+        archive=args.archive,
     )
     print(json.dumps(result, indent=2))
 

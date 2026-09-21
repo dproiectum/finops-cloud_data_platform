@@ -7,8 +7,8 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 
 from finops_cloud.config import load_config  # noqa: E402
-from finops_cloud.sql_runner import placeholders, render_sql, sql_text, table_context  # noqa: E402
-from finops_cloud.gold import (  # noqa: E402
+from finops_cloud.sql.runner import placeholders, render_sql, sql_text, table_context  # noqa: E402
+from finops_cloud.medallion.gold import (  # noqa: E402
     DATAMART_SCRIPTS,
     GOLD_DDL,
     GOLD_LOAD_SCRIPTS,
@@ -59,6 +59,14 @@ class SqlModelTests(unittest.TestCase):
         fact_sql = render_sql(GOLD_LOAD_SCRIPTS[-1], values)
         self.assertIn("REPLACE WHERE billing_month = '2026-07'", fact_sql)
 
+    def test_operations_sql_is_environment_aware(self):
+        relative_path = "infrastructure/03_create_ops.sql"
+        rendered = render_sql(relative_path, {})
+        self.assertEqual(placeholders(rendered), set())
+        self.assertEqual(rendered.count("environment STRING"), 5)
+        self.assertIn("CREATE CATALOG IF NOT EXISTS `finops_ops`", rendered)
+        self.assertEqual(rendered.count("`finops_ops`.`audit`."), 5)
+
     def test_wheel_configuration_embeds_root_sql_directories(self):
         with (ROOT / "pyproject.toml").open("rb") as stream:
             project = tomllib.load(stream)
@@ -79,6 +87,10 @@ class SqlModelTests(unittest.TestCase):
         self.assertEqual(
             data_files["share/finops_cloud/sql/datamarts/table_refresh"],
             ["sql/datamarts/table_refresh/*.sql"],
+        )
+        self.assertEqual(
+            data_files["share/finops_cloud/sql/maintenance"],
+            ["sql/maintenance/*.sql"],
         )
 
 

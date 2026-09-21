@@ -44,7 +44,7 @@ def finish_run(spark, config, run_id: str, status: str, message: str | None = No
         f"""
         UPDATE {config.table('pipeline_run', 'ops')}
         SET status = '{status}', finished_at = current_timestamp(), message = '{escaped}'
-        WHERE run_id = '{run_id}'
+        WHERE environment = '{config.environment}' AND run_id = '{run_id}'
         """
     )
 
@@ -57,11 +57,13 @@ def set_month_status(spark, config, month: str, status: str, source: str, run_id
         f"""
         MERGE INTO {table} AS target
         USING (
-          SELECT '{month}' AS billing_month, '{status}' AS status,
+          SELECT '{config.environment}' AS environment,
+                 '{month}' AS billing_month, '{status}' AS status,
                  '{source}' AS authoritative_source, '{run_id}' AS last_run_id,
                  current_timestamp() AS updated_at
         ) AS source
-        ON target.billing_month = source.billing_month
+        ON target.environment = source.environment
+           AND target.billing_month = source.billing_month
         WHEN MATCHED THEN UPDATE SET *
         WHEN NOT MATCHED THEN INSERT *
         """

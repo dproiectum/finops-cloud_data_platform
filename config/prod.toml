@@ -3,7 +3,5 @@ environment = "prod"
 [databricks]
 profile = "finops-prod"
 catalog = "finops_prod"
-source_volume = "/Volumes/finops_prod/raw/focus"
-archive_volume = "/Volumes/finops_prod/raw/focus_archive"
 gcs_service_credential = "finops-gcs-prod"
 gcp_project = "CHANGE_ME_GCP_PROJECT"
