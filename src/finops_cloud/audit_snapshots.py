@@ -199,10 +199,23 @@ def capture_frame_state(
 
 def write_snapshot(spark, config, snapshot: dict[str, Any]) -> None:
     """Append one BEFORE, SOURCE, or AFTER metric snapshot to Delta."""
-    ordered = [item.strip().split()[0] for item in SNAPSHOT_SCHEMA.split(",")]
+    
+    #21/09/2026
+    #this line may be the root cause the the pipeline failing 
+    #ordered = [item.strip().split()[0] for item in SNAPSHOT_SCHEMA.split(",")]
+    
+    #suggestion from Genie Code of databrickswith their reason :
+    #Parse the snapshot schema by line, not by comma: this keeps decimal(38,6) intact and fixes the bad 6) key without changing pipeline logic.
+    ordered = [
+        line.strip().rstrip(",").split()[0]
+        for line in SNAPSHOT_SCHEMA.strip().splitlines()
+        if line.strip()
+        ]
+    
+    
     values = tuple(snapshot[name] for name in ordered)
     spark.createDataFrame([values], SNAPSHOT_SCHEMA).write.mode("append").saveAsTable(
-        config.table("month_snapshot", "ops")
+        configfinops_dev.datamart.dm_cost_by_application_owner_month.table("month_snapshot", "ops")
     )
 
 
