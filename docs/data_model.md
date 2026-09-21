@@ -25,6 +25,13 @@ in the fact table to support transactional replacement of one Delta month.
 Monthly billing is authoritative. It replaces the logical partition previously
 fed by daily files for the same month. The two sources are never added together.
 
+Bronze preserves source values exactly. Before the blocking Silver validation,
+the Data Contract applies one explicit remediation: an Adjustment row whose
+`ServiceName` is null receives its non-empty `ChargeDescription`. The known
+rounding rows therefore use `RoundingAdjustment`. Every other missing
+`ServiceName` remains invalid; generic `Unknown`, `ResourceName`, and
+`ResourceType` fallbacks are not used.
+
 ## Main relationships
 
 ```mermaid

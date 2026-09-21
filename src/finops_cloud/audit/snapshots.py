@@ -85,6 +85,7 @@ def capture_frame_state(
             "BillingPeriodStart",
             "ChargePeriodStart",
             "ProviderName",
+            "ServiceName",
         )
         if name in columns
     ]

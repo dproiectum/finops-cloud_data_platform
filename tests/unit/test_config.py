@@ -91,6 +91,21 @@ class ConfigTests(unittest.TestCase):
             self.assertEqual(len(set(tables)), 30)
             self.assertTrue(all(name.startswith(f"{catalog}.") for name in tables))
 
+    def test_service_name_fallback_is_narrow_and_has_no_generic_placeholder(self):
+        contract_path = (
+            ROOT
+            / "contracts/focus_cost_usage/v1.0.0/focus_cost_usage_contract.yaml"
+        )
+        content = contract_path.read_text(encoding="utf-8")
+        service_name = content.split("  - name: ServiceName", 1)[1].split(
+            "  - name: SkuId", 1
+        )[0]
+        self.assertIn("nullable: false", service_name)
+        self.assertIn("source_field: ChargeDescription", service_name)
+        self.assertIn("condition_field: ChargeCategory", service_name)
+        self.assertIn("condition_value: Adjustment", service_name)
+        self.assertNotIn("Unknown", service_name)
+
 
 if __name__ == "__main__":
     unittest.main()

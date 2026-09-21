@@ -155,6 +155,7 @@ Contrôles de doublons et de qualité :
 
 - aucun `_source_file` associé à plusieurs runs Bronze;
 - `duplicate_keys = 0` dans le fait Gold;
+- les valeurs `ServiceName` nulles de Bronze ne subsistent pas dans Silver;
 - `duplicate_charge_ids = 0` et `null_critical_count = 0` dans les snapshots
   `AFTER`.
 

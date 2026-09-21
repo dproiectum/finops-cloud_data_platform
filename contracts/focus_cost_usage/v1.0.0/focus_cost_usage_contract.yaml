@@ -268,6 +268,14 @@ fields:
     nullable: false
     description: >
       Cloud service associated with the charge.
+    null_fallback:
+      source_field: ChargeDescription
+      condition_field: ChargeCategory
+      condition_value: Adjustment
+    note: >
+      Adjustment rows with a missing ServiceName are normalized from their
+      non-empty ChargeDescription before the blocking non-null check. All other
+      missing ServiceName values remain invalid.
 
   - name: SkuId
     source_type: "large_string"
