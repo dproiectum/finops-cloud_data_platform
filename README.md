@@ -21,7 +21,7 @@ PROD can independently consume exactly the same source files.
 config/                         Environment and common RAW/OPS configuration
 contracts/                      Versioned FOCUS Data Contract
 notebooks/pipelines/            Manual pipeline entry points
-notebooks/operations/           Environment check and optional archive retry
+notebooks/operations/           Environment and prerequisite checks
 sql/platform_setup/             Ordered manual rebuild and validation scripts
 sql/gold/                       Gold DDL and loading SQL
 sql/datamarts/                  Certified datamart SQL
@@ -37,7 +37,8 @@ src/finops_cloud/pipelines/     End-to-end orchestration
 Follow [docs/manual_platform_rebuild.md](docs/manual_platform_rebuild.md).
 The important entry point for a historical monthly load is
 `notebooks/pipelines/03_billing_backfill.ipynb`: choose `environment`,
-`start_month`, and `end_month`, keep `archive=false`, then run each cell.
+`start_month`, and `end_month`, then run each cell. RAW archival is disabled by
+the common configuration.
 
 ## Processing flow
 

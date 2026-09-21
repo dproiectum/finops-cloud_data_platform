@@ -26,11 +26,9 @@ dev = [
 finops-daily = "finops_cloud.pipelines.daily_incremental:main"
 finops-monthly = "finops_cloud.pipelines.monthly_close:main"
 finops-backfill = "finops_cloud.pipelines.billing_backfill:main"
-finops-archive = "finops_cloud.pipelines.archive_retry:main"
 finops_daily = "finops_cloud.pipelines.daily_incremental:main"
 finops_monthly = "finops_cloud.pipelines.monthly_close:main"
 finops_backfill = "finops_cloud.pipelines.billing_backfill:main"
-finops_archive = "finops_cloud.pipelines.archive_retry:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

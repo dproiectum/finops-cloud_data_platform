@@ -5,12 +5,16 @@ from __future__ import annotations
 import argparse
 from datetime import date
 import json
+import re
 
 from finops_cloud.pipelines.monthly_close import run as close_month
 
 
 def month_range(start_month: str, end_month: str) -> list[str]:
     """Return every YYYY-MM value in an inclusive chronological range."""
+    pattern = r"[0-9]{4}-(0[1-9]|1[0-2])"
+    if not re.fullmatch(pattern, start_month) or not re.fullmatch(pattern, end_month):
+        raise ValueError("start_month and end_month must use YYYY-MM")
     start_year, start_number = map(int, start_month.split("-"))
     end_year, end_number = map(int, end_month.split("-"))
     start = date(start_year, start_number, 1)

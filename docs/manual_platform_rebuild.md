@@ -23,6 +23,10 @@ de conflit.
 
 ## 2. Supprimer complètement DEV
 
+Vérifier d’abord qu’aucun Job ou notebook Daily, Monthly ou Backfill n’est en
+cours d’exécution. Ne pas lancer deux chargements simultanément pendant la
+reconstruction.
+
 Exécuter `sql/platform_setup/00_reset_dev.sql` dans un SQL Warehouse. Il
 supprime `finops_dev` avec tous ses schémas et toutes ses tables. Il ne consulte
 pas OPS et fonctionne donc même si `finops_ops` a déjà été supprimé.
@@ -53,25 +57,27 @@ Exécuter `sql/platform_setup/02_create_dev.sql`. Le script crée seulement :
 Exécuter `sql/platform_setup/03_create_ops.sql`. Il crée `finops_ops.audit` et
 les cinq tables opérationnelles avec la colonne `environment`.
 
-Exécuter ensuite `sql/platform_setup/04_clear_dev_ops.sql`. Si OPS vient d’être
+## 6. Nettoyer l’historique OPS de DEV
+
+Exécuter `sql/platform_setup/04_clear_dev_ops.sql`. Si OPS vient d’être
 recréé, les tables sont déjà vides et les `DELETE` ne suppriment rien. Si OPS
 existait auparavant, seules les lignes `environment = 'dev'` sont supprimées;
 les lignes PROD sont conservées.
 
-## 6. Vérifier l’état vide
+## 7. Vérifier l’état vide
 
 Exécuter `sql/platform_setup/05_validate_empty_dev.sql` seulement maintenant,
-après les étapes 4 et 5. Les quatre listes de tables DEV doivent être vides et
+après les étapes 4 à 6. Les quatre listes de tables DEV doivent être vides et
 les cinq compteurs OPS DEV doivent être égaux à zéro. Les Parquet RAW doivent
 toujours être listés.
 
-## 7. Vérifier le contexte Databricks
+## 8. Vérifier le contexte Databricks
 
 Ouvrir `notebooks/operations/environment_check.ipynb`, définir
 `ENVIRONMENT = "dev"`, attacher du compute Serverless, puis exécuter toutes les
 cellules. Ce notebook valide les objets créés sans les créer lui-même.
 
-## 8. Recharger les mois
+## 9. Recharger les mois
 
 Ouvrir `notebooks/pipelines/03_billing_backfill.ipynb` et définir la période :
 
@@ -79,14 +85,19 @@ Ouvrir `notebooks/pipelines/03_billing_backfill.ipynb` et définir la période :
 ENVIRONMENT = "dev"
 START_MONTH = "2025-01"
 END_MONTH = "2025-12"
-ARCHIVE = "false"
 ```
 
 Exécuter toutes les cellules dans l’ordre. Chaque fichier mensuel traverse
 Bronze, le Data Contract, Silver, Gold et les datamarts. Les snapshots et les
 réconciliations sont enregistrés dans OPS avec `environment = 'dev'`.
 
-## 9. Vérifier le chargement et les doublons
+Pendant cette première reconstruction, ne pas relancer le notebook dans un
+second onglet. Bronze ignore un `_source_file` déjà enregistré, Silver et le
+fait Gold remplacent le mois, et les datamarts sont recréés. Les tables OPS,
+elles, conservent volontairement une ligne par exécution pour constituer
+l’historique d’audit.
+
+## 10. Vérifier le chargement et les doublons
 
 Exécuter `sql/platform_setup/06_validate_loaded_dev.sql`. Les contrôles attendus
 sont :

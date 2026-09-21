@@ -21,4 +21,6 @@ LOCATION 'gs://dtl_finops/focus_archive'
 COMMENT 'Optional archive location; automatic archival is currently disabled';
 
 SHOW VOLUMES IN `finops_raw`.`landing`;
+DESCRIBE VOLUME `finops_raw`.`landing`.`focus`;
+DESCRIBE VOLUME `finops_raw`.`landing`.`focus_archive`;
 LIST '/Volumes/finops_raw/landing/focus/monthly';

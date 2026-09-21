@@ -19,6 +19,10 @@ class BackfillTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             month_range("2026-02", "2025-11")
 
+    def test_months_require_zero_padded_yyyy_mm_format(self):
+        with self.assertRaises(ValueError):
+            month_range("2025-1", "2025-02")
+
 
 if __name__ == "__main__":
     unittest.main()

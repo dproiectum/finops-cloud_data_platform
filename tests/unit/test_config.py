@@ -77,6 +77,12 @@ class ConfigTests(unittest.TestCase):
         self.assertFalse(dev.archive_daily)
         self.assertFalse(dev.archive_billing)
 
+    def test_explicit_environment_cannot_be_changed_by_process_state(self):
+        with patch.dict(os.environ, {"FINOPS_ENVIRONMENT": "prod"}):
+            config = load_config("dev", ROOT)
+        self.assertEqual(config.environment, "dev")
+        self.assertEqual(config.catalog, "finops_dev")
+
 
 if __name__ == "__main__":
     unittest.main()

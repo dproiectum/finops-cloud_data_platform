@@ -30,77 +30,15 @@ captured_at timestamp
 
 
 def ensure_audit_tables(spark, config) -> None:
-    """Create all Delta tables required for run, month, and archive auditing."""
-    # CREATE IF NOT EXISTS makes setup safe at the beginning of every run.
-    pipeline_run = config.table("pipeline_run", "ops")
-    month_snapshot = config.table("month_snapshot", "ops")
-    reconciliation = config.table("reconciliation", "ops")
-    month_status = config.table("month_status", "ops")
-    file_archive = config.table("file_archive", "ops")
-    spark.sql(
-        f"""
-        CREATE TABLE IF NOT EXISTS {pipeline_run} (
-          run_id STRING,
-          pipeline_name STRING,
-          environment STRING,
-          billing_month STRING,
-          status STRING,
-          started_at TIMESTAMP,
-          finished_at TIMESTAMP,
-          message STRING
-        ) USING DELTA
-        """
-    )
-    spark.sql(f"CREATE TABLE IF NOT EXISTS {month_snapshot} ({SNAPSHOT_SCHEMA}) USING DELTA")
-    spark.sql(
-        f"""
-        CREATE TABLE IF NOT EXISTS {reconciliation} (
-          run_id STRING,
-          environment STRING,
-          billing_month STRING,
-          before_rows BIGINT,
-          billing_rows BIGINT,
-          after_rows BIGINT,
-          before_billed_cost DECIMAL(38,6),
-          billing_billed_cost DECIMAL(38,6),
-          after_billed_cost DECIMAL(38,6),
-          billing_daily_difference DECIMAL(38,6),
-          after_billing_difference DECIMAL(38,6),
-          status STRING,
-          reconciled_at TIMESTAMP
-        ) USING DELTA
-        """
-    )
-    spark.sql(
-        f"""
-        CREATE TABLE IF NOT EXISTS {month_status} (
-          environment STRING,
-          billing_month STRING,
-          status STRING,
-          authoritative_source STRING,
-          last_run_id STRING,
-          updated_at TIMESTAMP
-        ) USING DELTA
-        """
-    )
-    spark.sql(
-        f"""
-        CREATE TABLE IF NOT EXISTS {file_archive} (
-          run_id STRING,
-          environment STRING,
-          billing_month STRING,
-          source_uri STRING,
-          archive_uri STRING,
-          source_generation STRING,
-          archive_generation STRING,
-          crc32c STRING,
-          size_bytes BIGINT,
-          archive_status STRING,
-          archived_at TIMESTAMP,
-          error_message STRING
-        ) USING DELTA
-        """
-    )
+    """Fail clearly when a manually provisioned operations table is absent."""
+    for key in (
+        "pipeline_run",
+        "month_snapshot",
+        "reconciliation",
+        "month_status",
+        "file_archive",
+    ):
+        spark.sql(f"DESCRIBE TABLE {config.table(key, 'ops')}")
 
 
 def capture_frame_state(

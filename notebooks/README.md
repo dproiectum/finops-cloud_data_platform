@@ -15,10 +15,10 @@ logic.
 ## Operations
 
 - `operations/environment_check.ipynb`: verify selected catalogs, schemas, and
-  source Volume before loading;
-- `operations/archive_retry.ipynb`: reserved for a future archival policy.
-  Automatic archival is currently disabled because RAW is consumed by DEV and
-  PROD.
+  source Volume before loading.
+
+Automatic archival has no active notebook or Job because RAW is consumed by
+both DEV and PROD.
 
 Catalog creation, DEV reset, and validations are deliberately kept as visible,
 ordered SQL scripts under `sql/platform_setup`. Run them manually in a SQL

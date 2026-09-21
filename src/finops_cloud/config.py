@@ -139,6 +139,8 @@ class PlatformConfig:
 
 def load_config(environment: str, root: Path | None = None) -> PlatformConfig:
     """Load, merge, override, and validate configuration for DEV or PROD."""
+    if environment not in {"dev", "prod"}:
+        raise ValueError("environment must be dev or prod")
     project_root = root or PROJECT_ROOT
 
     # Common settings define the platform; dev/prod files override differences.
@@ -149,7 +151,6 @@ def load_config(environment: str, root: Path | None = None) -> PlatformConfig:
     raw = _deep_merge(common, selected)
 
     # Environment variables are optional last-mile overrides for CI/CD and Jobs.
-    actual_environment = os.getenv("FINOPS_ENVIRONMENT", raw.get("environment", environment))
     databricks = raw["databricks"]
     storage = raw["storage"]
     raw_storage = raw["raw"]
@@ -157,7 +158,7 @@ def load_config(environment: str, root: Path | None = None) -> PlatformConfig:
     contract = raw["contract"]
     quality = raw["quality"]
     config = PlatformConfig(
-        environment=actual_environment,
+        environment=environment,
         profile=os.getenv("FINOPS_DATABRICKS_PROFILE", databricks["profile"]),
         catalog=os.getenv("FINOPS_CATALOG", databricks["catalog"]),
         raw_catalog=os.getenv("FINOPS_RAW_CATALOG", raw_storage["catalog"]),

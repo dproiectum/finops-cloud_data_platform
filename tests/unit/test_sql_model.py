@@ -67,6 +67,14 @@ class SqlModelTests(unittest.TestCase):
         self.assertIn("CREATE CATALOG IF NOT EXISTS `finops_ops`", rendered)
         self.assertEqual(rendered.count("`finops_ops`.`audit`."), 5)
 
+    def test_monthly_fact_load_replaces_instead_of_appending(self):
+        fact_load = sql_text("gold/data_loading/30_replace_fact_month.sql")
+        self.assertIn("REPLACE WHERE billing_month = '{billing_month}'", fact_load)
+
+    def test_all_datamarts_are_rebuilt_instead_of_appended(self):
+        for relative_path in DATAMART_SCRIPTS:
+            self.assertIn("CREATE OR REPLACE TABLE", sql_text(relative_path))
+
     def test_dev_reset_has_no_dependency_on_operations_catalog(self):
         reset = sql_text("platform_setup/00_reset_dev.sql")
         self.assertIn("DROP CATALOG IF EXISTS `finops_dev` CASCADE", reset)
@@ -91,6 +99,11 @@ class SqlModelTests(unittest.TestCase):
                 "06_validate_loaded_dev.sql",
             ],
         )
+
+    def test_raw_setup_verifies_registered_volume_locations(self):
+        raw_setup = sql_text("platform_setup/01_create_or_verify_raw.sql")
+        self.assertIn("DESCRIBE VOLUME `finops_raw`.`landing`.`focus`", raw_setup)
+        self.assertIn("LIST '/Volumes/finops_raw/landing/focus/monthly'", raw_setup)
 
     def test_wheel_configuration_embeds_root_sql_directories(self):
         with (ROOT / "pyproject.toml").open("rb") as stream:
