@@ -1,7 +1,5 @@
--- DESTRUCTIVE: remove the complete DEV catalog before a clean reload.
--- This script never deletes GCS files and never modifies finops_raw or finops_prod.
-
-DROP CATALOG IF EXISTS `finops_dev` CASCADE;
+-- STEP 04 - Start DEV with no previous operational history.
+-- Run only after 03_create_ops.sql. PROD rows remain untouched.
 
 DELETE FROM `finops_ops`.`audit`.`file_archive`
 WHERE environment = 'dev';

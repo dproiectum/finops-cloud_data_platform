@@ -1,71 +1,79 @@
 # Reconstruction manuelle DEV dans Databricks
 
-Cette procédure permet de comprendre et d’exécuter chaque étape. Les scripts ne
-sont jamais lancés automatiquement depuis ce dépôt.
+Les scripts à exécuter sont regroupés dans `sql/platform_setup`. Leur numéro
+indique l’ordre réel. Aucun script n’est lancé automatiquement par le projet.
 
-## 1. Mettre à jour le Git Folder Databricks
+## Situation des trois catalogues
 
-Dans **Workspace → Git folders**, ouvrir le projet, puis choisir **Pull**. Avant
-le pull, conserver ou annuler toute modification locale Databricks afin d’éviter
-un conflit.
+- `finops_raw` contient les Volumes externes donnant accès aux Parquet GCS. Il
+  reste disponible pour permettre le rechargement.
+- `finops_dev` contient uniquement les tables générées par le traitement. Il
+  est supprimé puis recréé pendant cette procédure.
+- `finops_ops` contient les audits. La procédure fonctionne qu’il existe déjà
+  ou qu’il ait été supprimé.
 
-## 2. Vérifier RAW sans rien modifier
+Les fichiers visibles dans `finops_raw` ne sont pas des copies supplémentaires :
+le Volume affiche directement `gs://dtl_finops/focus`.
 
-Dans **SQL Editor**, sélectionner un SQL Warehouse et ouvrir
-`sql/infrastructure/00_verify_existing_raw.sql`. Exécuter les instructions une
-par une. Vérifier que les fichiers `billing-YYYY-MM.parquet` sont listés.
+## 1. Mettre à jour le Git Folder
 
-Cette vérification remplace un inventaire complet inutile : son seul but est de
-protéger la source avant de déplacer les enregistrements Unity Catalog.
+Dans **Workspace → Git folders**, ouvrir le projet et sélectionner **Pull**.
+Vérifier d’abord qu’aucune modification Databricks non enregistrée ne provoquera
+de conflit.
 
-## 3. Enregistrer le RAW commun
+## 2. Supprimer complètement DEV
 
-Ouvrir `sql/infrastructure/01_create_raw.sql`. Lire puis exécuter chaque bloc.
-Le script retire les anciens enregistrements Volume de `finops_dev.raw`, crée
-`finops_raw.landing`, puis réenregistre les mêmes chemins GCS.
+Exécuter `sql/platform_setup/00_reset_dev.sql` dans un SQL Warehouse. Il
+supprime `finops_dev` avec tous ses schémas et toutes ses tables. Il ne consulte
+pas OPS et fonctionne donc même si `finops_ops` a déjà été supprimé.
 
-`DROP VOLUME` ne supprime pas les objets GCS. Ne poursuivez cependant que si
-l’étape 2 a confirmé les chemins attendus. Après exécution, vérifier de nouveau
-la liste sous `/Volumes/finops_raw/landing/focus/monthly`.
+## 3. Créer ou vérifier RAW
 
-## 4. Créer OPS
+Exécuter `sql/platform_setup/01_create_or_verify_raw.sql`.
 
-Exécuter `sql/infrastructure/03_create_ops.sql`. Il crée
-`finops_ops.audit` et ses cinq tables. La colonne `environment` permet aux
-exécutions DEV et PROD de rester indépendantes.
+- si `finops_raw` existe, les `CREATE IF NOT EXISTS` le conservent;
+- s’il n’existe pas, le catalogue, le schéma et les Volumes sont créés;
+- la dernière instruction doit lister les fichiers
+  `monthly/billing-YYYY-MM.parquet`.
 
-## 5. Réinitialiser DEV si nécessaire
+Cette étape ne crée aucune table Bronze, Silver, Gold ou datamart et ne modifie
+aucun Parquet.
 
-Pour un redémarrage complet, exécuter manuellement
-`sql/maintenance/00_reset_dev.sql`. Ce script :
+## 4. Recréer DEV vide
 
-- supprime entièrement le catalogue `finops_dev` avec tous ses schémas et
-  toutes ses tables;
-- supprime seulement les lignes OPS avec `environment = 'dev'`;
-- ne touche pas à `finops_raw`, aux fichiers GCS, à PROD, ni aux lignes OPS de
-  PROD.
+Exécuter `sql/platform_setup/02_create_dev.sql`. Le script crée seulement :
 
-`finops_raw` n’est pas une copie supplémentaire des données. Son Volume externe
-affiche directement les Parquet déjà présents dans `gs://dtl_finops/focus`.
-Supprimer ce catalogue ne supprimerait pas les fichiers et ne réduirait aucun
-doublon; cela retirerait seulement leur enregistrement Unity Catalog.
+- `finops_dev.bronze`;
+- `finops_dev.silver`;
+- `finops_dev.gold`;
+- `finops_dev.datamart`.
 
-## 6. Recréer les schémas DEV
+## 5. Recréer OPS avant toute validation
 
-Exécuter `sql/infrastructure/02_create_dev_schemas.sql`, puis
-`sql/maintenance/01_validate_empty_dev.sql`. Les listes de tables DEV doivent
-être vides et tous les compteurs OPS DEV doivent valoir zéro. La liste RAW doit
-toujours montrer les Parquet mensuels.
+Exécuter `sql/platform_setup/03_create_ops.sql`. Il crée `finops_ops.audit` et
+les cinq tables opérationnelles avec la colonne `environment`.
 
-## 7. Vérifier l’environnement dans un notebook
+Exécuter ensuite `sql/platform_setup/04_clear_dev_ops.sql`. Si OPS vient d’être
+recréé, les tables sont déjà vides et les `DELETE` ne suppriment rien. Si OPS
+existait auparavant, seules les lignes `environment = 'dev'` sont supprimées;
+les lignes PROD sont conservées.
 
-Ouvrir `notebooks/operations/environment_check.ipynb`, mettre
+## 6. Vérifier l’état vide
+
+Exécuter `sql/platform_setup/05_validate_empty_dev.sql` seulement maintenant,
+après les étapes 4 et 5. Les quatre listes de tables DEV doivent être vides et
+les cinq compteurs OPS DEV doivent être égaux à zéro. Les Parquet RAW doivent
+toujours être listés.
+
+## 7. Vérifier le contexte Databricks
+
+Ouvrir `notebooks/operations/environment_check.ipynb`, définir
 `ENVIRONMENT = "dev"`, attacher du compute Serverless, puis exécuter toutes les
-cellules. Le notebook valide les namespaces mais ne les crée pas.
+cellules. Ce notebook valide les objets créés sans les créer lui-même.
 
-## 8. Charger une période mensuelle
+## 8. Recharger les mois
 
-Ouvrir `notebooks/pipelines/03_billing_backfill.ipynb` et définir par exemple :
+Ouvrir `notebooks/pipelines/03_billing_backfill.ipynb` et définir la période :
 
 ```python
 ENVIRONMENT = "dev"
@@ -74,19 +82,16 @@ END_MONTH = "2025-12"
 ARCHIVE = "false"
 ```
 
-Exécuter les cellules dans l’ordre. Pour chaque mois, le code lit
-`billing-YYYY-MM.parquet`, alimente Bronze, applique le Data Contract, remplace
-le mois dans Silver, charge Gold, reconstruit les datamarts, puis écrit les
-snapshots et la réconciliation dans OPS.
+Exécuter toutes les cellules dans l’ordre. Chaque fichier mensuel traverse
+Bronze, le Data Contract, Silver, Gold et les datamarts. Les snapshots et les
+réconciliations sont enregistrés dans OPS avec `environment = 'dev'`.
 
-Les tables Bronze et Silver sont créées lors de leur première écriture. Les
-tables Gold et datamarts sont créées par les fichiers SQL référencés depuis
-`src/finops_cloud/medallion/gold.py`.
+## 9. Vérifier le chargement et les doublons
 
-## 9. Contrôler le résultat
+Exécuter `sql/platform_setup/06_validate_loaded_dev.sql`. Les contrôles attendus
+sont :
 
-Exécuter `sql/maintenance/02_validate_loaded_dev.sql`. Vérifier les volumes de
-lignes, un statut par mois, et `after_billing_difference = 0` avec
-`status = 'PASSED'` dans les réconciliations. Les requêtes finales doivent aussi
-retourner zéro clé Gold dupliquée, zéro `duplicate_charge_ids`, et aucun fichier
-source associé à plusieurs exécutions d’ingestion.
+- `status = 'PASSED'` et `after_billing_difference = 0` par mois;
+- aucun fichier source associé à plusieurs exécutions d’ingestion;
+- `duplicate_keys = 0` dans la table de faits Gold;
+- `duplicate_charge_ids = 0` dans les snapshots `AFTER`.

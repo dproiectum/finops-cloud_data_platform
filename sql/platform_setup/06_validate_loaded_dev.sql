@@ -1,4 +1,4 @@
--- Read-only checks after running 03_billing_backfill.ipynb.
+-- STEP 06 - Read-only checks after running 03_billing_backfill.ipynb.
 
 SELECT 'bronze.focus_billing_raw' AS table_name, count(*) AS row_count
 FROM `finops_dev`.`bronze`.`focus_billing_raw`

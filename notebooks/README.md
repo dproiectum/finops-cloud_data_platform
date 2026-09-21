@@ -20,6 +20,6 @@ logic.
   Automatic archival is currently disabled because RAW is consumed by DEV and
   PROD.
 
-Catalog creation, DEV reset, and validations are deliberately kept as visible
-SQL scripts under `sql/infrastructure` and `sql/maintenance`. Run them manually
-in a SQL Warehouse by following `docs/manual_platform_rebuild.md`.
+Catalog creation, DEV reset, and validations are deliberately kept as visible,
+ordered SQL scripts under `sql/platform_setup`. Run them manually in a SQL
+Warehouse by following `docs/manual_platform_rebuild.md`.

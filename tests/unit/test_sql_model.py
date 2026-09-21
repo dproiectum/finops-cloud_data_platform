@@ -60,19 +60,37 @@ class SqlModelTests(unittest.TestCase):
         self.assertIn("REPLACE WHERE billing_month = '2026-07'", fact_sql)
 
     def test_operations_sql_is_environment_aware(self):
-        relative_path = "infrastructure/03_create_ops.sql"
+        relative_path = "platform_setup/03_create_ops.sql"
         rendered = render_sql(relative_path, {})
         self.assertEqual(placeholders(rendered), set())
         self.assertEqual(rendered.count("environment STRING"), 5)
         self.assertIn("CREATE CATALOG IF NOT EXISTS `finops_ops`", rendered)
         self.assertEqual(rendered.count("`finops_ops`.`audit`."), 5)
 
-    def test_dev_reset_drops_only_dev_catalog_and_dev_audit_rows(self):
-        reset = sql_text("maintenance/00_reset_dev.sql")
+    def test_dev_reset_has_no_dependency_on_operations_catalog(self):
+        reset = sql_text("platform_setup/00_reset_dev.sql")
         self.assertIn("DROP CATALOG IF EXISTS `finops_dev` CASCADE", reset)
         self.assertNotIn("DROP CATALOG IF EXISTS `finops_raw`", reset)
         self.assertNotIn("DROP CATALOG IF EXISTS `finops_prod`", reset)
-        self.assertEqual(reset.count("WHERE environment = 'dev'"), 5)
+        self.assertNotIn("`finops_ops`", reset)
+
+        clear_ops = sql_text("platform_setup/04_clear_dev_ops.sql")
+        self.assertEqual(clear_ops.count("WHERE environment = 'dev'"), 5)
+
+    def test_platform_setup_scripts_have_an_unambiguous_order(self):
+        scripts = sorted((ROOT / "sql" / "platform_setup").glob("*.sql"))
+        self.assertEqual(
+            [path.name for path in scripts],
+            [
+                "00_reset_dev.sql",
+                "01_create_or_verify_raw.sql",
+                "02_create_dev.sql",
+                "03_create_ops.sql",
+                "04_clear_dev_ops.sql",
+                "05_validate_empty_dev.sql",
+                "06_validate_loaded_dev.sql",
+            ],
+        )
 
     def test_wheel_configuration_embeds_root_sql_directories(self):
         with (ROOT / "pyproject.toml").open("rb") as stream:
@@ -96,8 +114,8 @@ class SqlModelTests(unittest.TestCase):
             ["sql/datamarts/table_refresh/*.sql"],
         )
         self.assertEqual(
-            data_files["share/finops_cloud/sql/maintenance"],
-            ["sql/maintenance/*.sql"],
+            data_files["share/finops_cloud/sql/platform_setup"],
+            ["sql/platform_setup/*.sql"],
         )
 
 

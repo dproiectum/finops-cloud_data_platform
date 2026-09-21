@@ -1,3 +1,4 @@
+-- STEP 03 - Create OPS before any validation or pipeline execution.
 -- One operations catalog records DEV and PROD independently through the
 -- environment column. Run this script manually once, then keep the history.
 

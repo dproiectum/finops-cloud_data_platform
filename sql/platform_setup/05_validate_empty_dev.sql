@@ -1,4 +1,4 @@
--- Read-only checks after reset and schema recreation.
+-- STEP 05 - Read-only checks after DEV and OPS have both been created.
 
 SHOW TABLES IN `finops_dev`.`bronze`;
 SHOW TABLES IN `finops_dev`.`silver`;
@@ -21,4 +21,3 @@ SELECT 'file_archive', count(*)
 FROM `finops_ops`.`audit`.`file_archive` WHERE environment = 'dev';
 
 LIST '/Volumes/finops_raw/landing/focus/monthly';
-

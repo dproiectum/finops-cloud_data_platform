@@ -22,8 +22,7 @@ config/                         Environment and common RAW/OPS configuration
 contracts/                      Versioned FOCUS Data Contract
 notebooks/pipelines/            Manual pipeline entry points
 notebooks/operations/           Environment check and optional archive retry
-sql/infrastructure/             Manual catalog/schema/table provisioning
-sql/maintenance/                Manual reset and validation queries
+sql/platform_setup/             Ordered manual rebuild and validation scripts
 sql/gold/                       Gold DDL and loading SQL
 sql/datamarts/                  Certified datamart SQL
 src/finops_cloud/audit/         Runs, snapshots, and reconciliation

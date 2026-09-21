@@ -6,7 +6,8 @@ This setup is manual and requires Unity Catalog administration privileges.
    Storage Credential exist.
 2. Grant the Storage Credential access to `gs://dtl_finops`.
 3. Open a Databricks SQL Warehouse.
-4. Follow the ordered procedure in `manual_platform_rebuild.md`.
+4. Follow the ordered scripts in `sql/platform_setup` as explained in
+   `manual_platform_rebuild.md`.
 5. Grant the pipeline identity `USE CATALOG`, `USE SCHEMA`, `READ VOLUME`, and
    the table creation/write permissions required in the selected environment.
 
