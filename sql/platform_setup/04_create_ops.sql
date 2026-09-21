@@ -1,6 +1,6 @@
--- STEP 03 - Create OPS before any validation or pipeline execution.
+-- STEP 04 - Recreate OPS before any validation or pipeline execution.
 -- One operations catalog records DEV and PROD independently through the
--- environment column. Run this script manually once, then keep the history.
+-- environment column.
 
 CREATE CATALOG IF NOT EXISTS `finops_ops`
 COMMENT 'Operational monitoring and reconciliation for FinOps pipelines';
@@ -79,4 +79,3 @@ CREATE TABLE IF NOT EXISTS `finops_ops`.`audit`.`file_archive` (
   archived_at TIMESTAMP,
   error_message STRING
 ) USING DELTA;
-

@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[2]
 class NotebookTests(unittest.TestCase):
     def test_notebooks_are_clean_and_valid(self):
         notebooks = sorted((ROOT / "notebooks").rglob("*.ipynb"))
-        self.assertEqual(len(notebooks), 4)
+        self.assertEqual(len(notebooks), 5)
         for path in notebooks:
             notebook = json.loads(path.read_text(encoding="utf-8"))
             self.assertEqual(notebook["nbformat"], 4)
@@ -41,6 +41,17 @@ class NotebookTests(unittest.TestCase):
         self.assertIn("SHOW VOLUMES IN", content)
         self.assertIn("SHOW TABLES IN", content)
         self.assertIn("/monthly", content)
+
+    def test_empty_table_initialization_is_explicit_and_calls_maintained_code(self):
+        content = (
+            ROOT / "notebooks/operations/initialize_empty_data_tables.ipynb"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            "finops_cloud.medallion.initialize import initialize_empty_tables",
+            content,
+        )
+        self.assertIn("CREATE_EMPTY_TABLES", content)
+        self.assertIn('ENVIRONMENT = \\"dev\\"', content)
 
     def test_manual_monthly_notebooks_do_not_offer_archival(self):
         for name in (

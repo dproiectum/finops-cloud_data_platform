@@ -35,10 +35,17 @@ src/finops_cloud/pipelines/     End-to-end orchestration
 ## Manual rebuild and load
 
 Follow [docs/manual_platform_rebuild.md](docs/manual_platform_rebuild.md).
-The important entry point for a historical monthly load is
+The structure-only notebook is
+`notebooks/operations/initialize_empty_data_tables.ipynb`; run it once for DEV
+and once for PROD before loading. The important entry point for a historical
+monthly load is
 `notebooks/pipelines/03_billing_backfill.ipynb`: choose `environment`,
 `start_month`, and `end_month`, then run each cell. RAW archival is disabled by
 the common configuration.
+
+After the manual DEV load and controls, follow
+[docs/databricks_jobs_manual_setup.md](docs/databricks_jobs_manual_setup.md) to
+build and capture the three-task DAG in the Databricks UI.
 
 ## Processing flow
 
@@ -65,7 +72,9 @@ Gold, refreshes the datamarts, and stores the reconciliation in OPS.
 - `01_daily_incremental.ipynb`: ingest a daily provisional file;
 - `02_monthly_close.ipynb`: close one month from billing;
 - `03_billing_backfill.ipynb`: load an inclusive range of billing months;
-- `environment_check.ipynb`: validate configuration and required namespaces.
+- `environment_check.ipynb`: validate configuration and required namespaces;
+- `initialize_empty_data_tables.ipynb`: create the 30 empty business tables for
+  one selected environment.
 
 ## Local validation
 

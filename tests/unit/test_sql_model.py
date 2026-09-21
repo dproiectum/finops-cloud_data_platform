@@ -60,7 +60,7 @@ class SqlModelTests(unittest.TestCase):
         self.assertIn("REPLACE WHERE billing_month = '2026-07'", fact_sql)
 
     def test_operations_sql_is_environment_aware(self):
-        relative_path = "platform_setup/03_create_ops.sql"
+        relative_path = "platform_setup/04_create_ops.sql"
         rendered = render_sql(relative_path, {})
         self.assertEqual(placeholders(rendered), set())
         self.assertEqual(rendered.count("environment STRING"), 5)
@@ -75,35 +75,50 @@ class SqlModelTests(unittest.TestCase):
         for relative_path in DATAMART_SCRIPTS:
             self.assertIn("CREATE OR REPLACE TABLE", sql_text(relative_path))
 
-    def test_dev_reset_has_no_dependency_on_operations_catalog(self):
-        reset = sql_text("platform_setup/00_reset_dev.sql")
-        self.assertIn("DROP CATALOG IF EXISTS `finops_dev` CASCADE", reset)
-        self.assertNotIn("DROP CATALOG IF EXISTS `finops_raw`", reset)
-        self.assertNotIn("DROP CATALOG IF EXISTS `finops_prod`", reset)
-        self.assertNotIn("`finops_ops`", reset)
-
-        clear_ops = sql_text("platform_setup/04_clear_dev_ops.sql")
-        self.assertEqual(clear_ops.count("WHERE environment = 'dev'"), 5)
+    def test_full_reset_drops_exactly_the_four_project_catalogs(self):
+        reset = sql_text("platform_setup/00_drop_all_project_catalogs.sql")
+        for catalog in ("finops_raw", "finops_dev", "finops_prod", "finops_ops"):
+            self.assertIn(f"DROP CATALOG IF EXISTS `{catalog}` CASCADE", reset)
+        self.assertEqual(reset.count("DROP CATALOG IF EXISTS"), 4)
+        for protected in ("main", "system", "samples"):
+            self.assertNotIn(f"DROP CATALOG IF EXISTS `{protected}`", reset)
 
     def test_platform_setup_scripts_have_an_unambiguous_order(self):
         scripts = sorted((ROOT / "sql" / "platform_setup").glob("*.sql"))
         self.assertEqual(
             [path.name for path in scripts],
             [
-                "00_reset_dev.sql",
-                "01_create_or_verify_raw.sql",
+                "00_drop_all_project_catalogs.sql",
+                "01_create_raw.sql",
                 "02_create_dev.sql",
-                "03_create_ops.sql",
-                "04_clear_dev_ops.sql",
-                "05_validate_empty_dev.sql",
+                "03_create_prod.sql",
+                "04_create_ops.sql",
+                "05_validate_empty_platform.sql",
                 "06_validate_loaded_dev.sql",
             ],
         )
 
     def test_raw_setup_verifies_registered_volume_locations(self):
-        raw_setup = sql_text("platform_setup/01_create_or_verify_raw.sql")
+        raw_setup = sql_text("platform_setup/01_create_raw.sql")
         self.assertIn("DESCRIBE VOLUME `finops_raw`.`landing`.`focus`", raw_setup)
         self.assertIn("LIST '/Volumes/finops_raw/landing/focus/monthly'", raw_setup)
+
+    def test_dev_and_prod_create_the_same_processing_schemas(self):
+        dev = sql_text("platform_setup/02_create_dev.sql")
+        prod = sql_text("platform_setup/03_create_prod.sql")
+        for schema in ("bronze", "silver", "gold", "datamart"):
+            self.assertIn(f"`finops_dev`.`{schema}`", dev)
+            self.assertIn(f"`finops_prod`.`{schema}`", prod)
+
+    def test_empty_platform_validation_checks_all_sixty_business_tables(self):
+        validation = sql_text("platform_setup/05_validate_empty_platform.sql")
+        self.assertEqual(validation.count("SELECT 'finops_dev."), 30)
+        self.assertEqual(validation.count("SELECT 'finops_prod."), 30)
+
+    def test_loaded_validation_contains_blocking_job_assertions(self):
+        validation = sql_text("platform_setup/06_validate_loaded_dev.sql")
+        self.assertGreaterEqual(validation.count("assert_true("), 7)
+        self.assertIn("CONTROL FAILED: PROD is no longer empty", validation)
 
     def test_wheel_configuration_embeds_root_sql_directories(self):
         with (ROOT / "pyproject.toml").open("rb") as stream:

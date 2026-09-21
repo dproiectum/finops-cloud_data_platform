@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 
 from finops_cloud.config import load_config  # noqa: E402
+from finops_cloud.medallion.initialize import business_tables  # noqa: E402
 
 
 class ConfigTests(unittest.TestCase):
@@ -82,6 +83,13 @@ class ConfigTests(unittest.TestCase):
             config = load_config("dev", ROOT)
         self.assertEqual(config.environment, "dev")
         self.assertEqual(config.catalog, "finops_dev")
+
+    def test_each_environment_declares_thirty_business_tables(self):
+        for environment, catalog in (("dev", "finops_dev"), ("prod", "finops_prod")):
+            tables = business_tables(load_config(environment, ROOT))
+            self.assertEqual(len(tables), 30)
+            self.assertEqual(len(set(tables)), 30)
+            self.assertTrue(all(name.startswith(f"{catalog}.") for name in tables))
 
 
 if __name__ == "__main__":

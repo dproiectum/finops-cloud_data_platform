@@ -1,5 +1,5 @@
--- STEP 01 - Create RAW only when absent, then verify the monthly Parquets.
--- Existing objects and GCS files are not replaced or deleted.
+-- STEP 01 - Re-register the unchanged GCS source as external RAW Volumes.
+-- This creates Unity Catalog metadata only; it does not copy the Parquet files.
 
 CREATE EXTERNAL LOCATION IF NOT EXISTS `finops_gcs`
 URL 'gs://dtl_finops'

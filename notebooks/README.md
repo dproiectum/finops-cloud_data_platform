@@ -16,10 +16,12 @@ logic.
 
 - `operations/environment_check.ipynb`: verify selected catalogs, schemas, and
   source Volume before loading.
+- `operations/initialize_empty_data_tables.ipynb`: manually create all 30 empty
+  business tables in DEV or PROD after a complete reset.
 
 Automatic archival has no active notebook or Job because RAW is consumed by
 both DEV and PROD.
 
-Catalog creation, DEV reset, and validations are deliberately kept as visible,
-ordered SQL scripts under `sql/platform_setup`. Run them manually in a SQL
-Warehouse by following `docs/manual_platform_rebuild.md`.
+Catalog creation, the four-catalog reset, and validations are deliberately kept
+as visible, ordered SQL scripts under `sql/platform_setup`. Run them manually
+in a SQL Warehouse by following `docs/manual_platform_rebuild.md`.
