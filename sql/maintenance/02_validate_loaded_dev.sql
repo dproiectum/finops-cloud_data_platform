@@ -25,3 +25,26 @@ SELECT environment, billing_month, status,
 FROM `finops_ops`.`audit`.`monthly_reconciliation`
 WHERE environment = 'dev'
 ORDER BY billing_month;
+
+-- Expected result: no row. One source path must belong to only one ingestion run
+-- after a clean reload.
+SELECT _source_file, count(DISTINCT _ingestion_run_id) AS ingestion_runs
+FROM `finops_dev`.`bronze`.`focus_billing_raw`
+GROUP BY _source_file
+HAVING count(DISTINCT _ingestion_run_id) > 1;
+
+-- Expected duplicate_keys = 0 for every month.
+SELECT
+  billing_month,
+  count(*) AS fact_rows,
+  count(DISTINCT cost_usage_sk) AS distinct_fact_keys,
+  count(*) - count(DISTINCT cost_usage_sk) AS duplicate_keys
+FROM `finops_dev`.`gold`.`fact_finops_cost_usage`
+GROUP BY billing_month
+ORDER BY billing_month;
+
+-- Expected duplicate_charge_ids = 0 for every AFTER snapshot.
+SELECT billing_month, row_count, duplicate_charge_ids, null_critical_count
+FROM `finops_ops`.`audit`.`month_snapshot`
+WHERE environment = 'dev' AND capture_stage = 'AFTER'
+ORDER BY billing_month;

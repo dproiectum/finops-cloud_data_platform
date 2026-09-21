@@ -1,11 +1,7 @@
--- DESTRUCTIVE FOR DEV DELTA TABLES. Run manually only when restarting DEV.
--- This script never deletes GCS files and never modifies finops_prod.
+-- DESTRUCTIVE: remove the complete DEV catalog before a clean reload.
+-- This script never deletes GCS files and never modifies finops_raw or finops_prod.
 
-DROP SCHEMA IF EXISTS `finops_dev`.`datamart` CASCADE;
-DROP SCHEMA IF EXISTS `finops_dev`.`gold` CASCADE;
-DROP SCHEMA IF EXISTS `finops_dev`.`silver` CASCADE;
-DROP SCHEMA IF EXISTS `finops_dev`.`bronze` CASCADE;
-DROP SCHEMA IF EXISTS `finops_dev`.`ops` CASCADE;
+DROP CATALOG IF EXISTS `finops_dev` CASCADE;
 
 DELETE FROM `finops_ops`.`audit`.`file_archive`
 WHERE environment = 'dev';
@@ -21,4 +17,3 @@ WHERE environment = 'dev';
 
 DELETE FROM `finops_ops`.`audit`.`pipeline_run`
 WHERE environment = 'dev';
-

@@ -67,6 +67,13 @@ class SqlModelTests(unittest.TestCase):
         self.assertIn("CREATE CATALOG IF NOT EXISTS `finops_ops`", rendered)
         self.assertEqual(rendered.count("`finops_ops`.`audit`."), 5)
 
+    def test_dev_reset_drops_only_dev_catalog_and_dev_audit_rows(self):
+        reset = sql_text("maintenance/00_reset_dev.sql")
+        self.assertIn("DROP CATALOG IF EXISTS `finops_dev` CASCADE", reset)
+        self.assertNotIn("DROP CATALOG IF EXISTS `finops_raw`", reset)
+        self.assertNotIn("DROP CATALOG IF EXISTS `finops_prod`", reset)
+        self.assertEqual(reset.count("WHERE environment = 'dev'"), 5)
+
     def test_wheel_configuration_embeds_root_sql_directories(self):
         with (ROOT / "pyproject.toml").open("rb") as stream:
             project = tomllib.load(stream)

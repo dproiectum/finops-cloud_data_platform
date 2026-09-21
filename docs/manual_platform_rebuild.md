@@ -39,10 +39,16 @@ exécutions DEV et PROD de rester indépendantes.
 Pour un redémarrage complet, exécuter manuellement
 `sql/maintenance/00_reset_dev.sql`. Ce script :
 
-- supprime les schémas Bronze, Silver, Gold et datamart de DEV;
+- supprime entièrement le catalogue `finops_dev` avec tous ses schémas et
+  toutes ses tables;
 - supprime seulement les lignes OPS avec `environment = 'dev'`;
 - ne touche pas à `finops_raw`, aux fichiers GCS, à PROD, ni aux lignes OPS de
   PROD.
+
+`finops_raw` n’est pas une copie supplémentaire des données. Son Volume externe
+affiche directement les Parquet déjà présents dans `gs://dtl_finops/focus`.
+Supprimer ce catalogue ne supprimerait pas les fichiers et ne réduirait aucun
+doublon; cela retirerait seulement leur enregistrement Unity Catalog.
 
 ## 6. Recréer les schémas DEV
 
@@ -81,4 +87,6 @@ tables Gold et datamarts sont créées par les fichiers SQL référencés depuis
 
 Exécuter `sql/maintenance/02_validate_loaded_dev.sql`. Vérifier les volumes de
 lignes, un statut par mois, et `after_billing_difference = 0` avec
-`status = 'PASSED'` dans les réconciliations.
+`status = 'PASSED'` dans les réconciliations. Les requêtes finales doivent aussi
+retourner zéro clé Gold dupliquée, zéro `duplicate_charge_ids`, et aucun fichier
+source associé à plusieurs exécutions d’ingestion.
