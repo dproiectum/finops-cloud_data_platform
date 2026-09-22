@@ -47,6 +47,10 @@ After the manual DEV load and controls, follow
 [docs/databricks_jobs_manual_setup.md](docs/databricks_jobs_manual_setup.md) to
 build and capture the three-task DAG in the Databricks UI.
 
+After that DEV Job succeeds, follow
+[docs/databricks_prod_promotion.md](docs/databricks_prod_promotion.md) for the
+separate PROD preflight, canary, historical load, and post-load controls.
+
 ## Processing flow
 
 ```text

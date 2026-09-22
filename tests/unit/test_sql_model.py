@@ -95,6 +95,8 @@ class SqlModelTests(unittest.TestCase):
                 "04_create_ops.sql",
                 "05_validate_empty_platform.sql",
                 "06_validate_loaded_dev.sql",
+                "07_validate_prod_ready.sql",
+                "08_validate_loaded_prod.sql",
             ],
         )
 
@@ -119,6 +121,21 @@ class SqlModelTests(unittest.TestCase):
         validation = sql_text("platform_setup/06_validate_loaded_dev.sql")
         self.assertGreaterEqual(validation.count("assert_true("), 7)
         self.assertIn("CONTROL FAILED: PROD is no longer empty", validation)
+
+    def test_prod_preflight_is_empty_and_environment_scoped(self):
+        preflight = sql_text("platform_setup/07_validate_prod_ready.sql")
+        self.assertIn("30-table inventory", preflight)
+        self.assertGreaterEqual(preflight.count("assert_true("), 3)
+        self.assertIn("environment = 'prod'", preflight)
+        self.assertNotIn("DROP CATALOG", preflight)
+
+    def test_prod_loaded_validation_has_blocking_controls(self):
+        validation = sql_text("platform_setup/08_validate_loaded_prod.sql")
+        self.assertGreaterEqual(validation.count("assert_true("), 8)
+        self.assertIn("latest PROD pipeline run is not successful", validation)
+        self.assertIn("PROD Silver still contains a null ServiceName", validation)
+        self.assertIn("environment = 'prod'", validation)
+        self.assertNotIn("`finops_dev`", validation)
 
     def test_wheel_configuration_embeds_root_sql_directories(self):
         with (ROOT / "pyproject.toml").open("rb") as stream:

@@ -27,7 +27,7 @@ class NotebookTests(unittest.TestCase):
         expected = {
             "pipelines/01_daily_incremental.ipynb": "finops_cloud.pipelines.daily_incremental import run",
             "pipelines/02_monthly_close.ipynb": "finops_cloud.pipelines.monthly_close import run",
-            "pipelines/03_billing_backfill.ipynb": "finops_cloud.pipelines.billing_backfill import run",
+            "pipelines/03_billing_backfill.ipynb": "import finops_cloud.pipelines.billing_backfill as billing_backfill_module",
         }
         for name, import_line in expected.items():
             content = (ROOT / "notebooks" / name).read_text(encoding="utf-8")

@@ -178,16 +178,20 @@ La procédure détaillée est dans `docs/databricks_jobs_manual_setup.md`. Garde
 
 ## Phase 8 — Promotion et exploitation
 
-Après validation du DAG DEV et des captures :
+Après validation du DAG DEV et des captures, suivre la procédure détaillée
+`docs/databricks_prod_promotion.md` :
 
 - préparer les autorisations PROD;
-- conserver le Job actuel strictement en `environment=dev`, car son contrôle
+- exécuter `sql/platform_setup/07_validate_prod_ready.sql` avant le premier
+  chargement PROD;
+- conserver le Job DEV strictement en `environment=dev`, car son contrôle
   `06_validate_loaded_dev.sql` est volontairement spécifique à DEV;
-- créer plus tard un Job et un contrôle PROD séparés avant le premier chargement
-  PROD, uniquement après accord;
-- conserver RAW commun et l’archivage désactivé;
+- créer un Job PROD séparé et utiliser
+  `sql/platform_setup/08_validate_loaded_prod.sql`;
+- effectuer un canari PROD sur un mois avant le backfill complet;
+- conserver RAW commun et l'archivage désactivé;
 - surveiller les runs DEV/PROD dans `finops_ops.audit`;
 - synchroniser GitHub et le Git Folder avant chaque déploiement.
 
-La présente procédure s’arrête au chargement et à la validation DEV. Elle crée
-les structures PROD mais n’y charge aucune donnée.
+La reconstruction principale s'arrête à la validation DEV. Le passage PROD est
+une promotion séparée et explicitement contrôlée par la procédure de phase 8.
