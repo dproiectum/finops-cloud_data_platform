@@ -30,6 +30,7 @@ src/finops_cloud/medallion/     Bronze, Silver, Gold, contract, and Delta logic
 src/finops_cloud/storage/       Optional GCS archival
 src/finops_cloud/sql/           SQL loader and renderer
 src/finops_cloud/pipelines/     End-to-end orchestration
+apps/finops_dashboard/          Read-only Streamlit Databricks App
 ```
 
 ## Manual rebuild and load
@@ -50,6 +51,12 @@ build and capture the three-task DAG in the Databricks UI.
 After that DEV Job succeeds, follow
 [docs/databricks_prod_promotion.md](docs/databricks_prod_promotion.md) for the
 separate PROD preflight, canary, historical load, and post-load controls.
+
+After PROD validation, the read-only Streamlit application in
+[`apps/finops_dashboard`](apps/finops_dashboard) exposes the certified datamarts,
+cost definitions, FOCUS column dictionary, data quality and pipeline operations.
+Follow [docs/databricks_streamlit_app.md](docs/databricks_streamlit_app.md) to
+deploy and verify it manually in Databricks Apps.
 
 ## Processing flow
 

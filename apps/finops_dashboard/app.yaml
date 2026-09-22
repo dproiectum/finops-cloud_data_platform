@@ -1,0 +1,15 @@
+command:
+  - streamlit
+  - run
+  - app.py
+env:
+  - name: FINOPS_ENVIRONMENT
+    value: prod
+  - name: FINOPS_DATABRICKS_CATALOG
+    value: finops_prod
+  - name: FINOPS_OPERATIONS_CATALOG
+    value: finops_ops
+  - name: DATABRICKS_WAREHOUSE_ID
+    valueFrom: sql-warehouse
+  - name: STREAMLIT_GATHER_USAGE_STATS
+    value: "false"
