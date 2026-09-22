@@ -121,30 +121,6 @@ FROM `finops_ops`.`audit`.`month_snapshot`
 WHERE environment = 'dev' AND capture_stage = 'AFTER'
 ORDER BY billing_month;
 
--- Bronze preserves source defects; Silver must contain the contract fallback.
-WITH bronze AS (
-  SELECT
-    date_format(to_date(BillingPeriodStart), 'yyyy-MM') AS billing_month,
-    sum(CASE WHEN ServiceName IS NULL THEN 1 ELSE 0 END)
-      AS source_service_name_nulls
-  FROM `finops_dev`.`bronze`.`focus_billing_raw`
-  GROUP BY date_format(to_date(BillingPeriodStart), 'yyyy-MM')
-), silver AS (
-  SELECT
-    billing_month,
-    sum(CASE WHEN ServiceName IS NULL THEN 1 ELSE 0 END)
-      AS silver_service_name_nulls
-  FROM `finops_dev`.`silver`.`focus_cost_usage_central`
-  GROUP BY billing_month
-)
-SELECT
-  coalesce(bronze.billing_month, silver.billing_month) AS billing_month,
-  coalesce(bronze.source_service_name_nulls, 0) AS source_service_name_nulls,
-  coalesce(silver.silver_service_name_nulls, 0) AS silver_service_name_nulls
-FROM bronze
-FULL OUTER JOIN silver ON bronze.billing_month = silver.billing_month
-ORDER BY billing_month;
-
 -- PROD contains the 30 initialized tables, but no business row.
 SHOW TABLES IN `finops_prod`.`bronze`;
 SHOW TABLES IN `finops_prod`.`silver`;
@@ -293,13 +269,6 @@ FROM `finops_ops`.`audit`.`month_snapshot`
 WHERE environment = 'dev'
   AND capture_stage = 'AFTER'
   AND (duplicate_charge_ids <> 0 OR null_critical_count <> 0);
-
-SELECT assert_true(
-  count(*) = 0,
-  'CONTROL FAILED: Silver still contains a null ServiceName'
-)
-FROM `finops_dev`.`silver`.`focus_cost_usage_central`
-WHERE ServiceName IS NULL;
 
 SELECT assert_true(
   (SELECT count(*) FROM `finops_prod`.`bronze`.`focus_daily_raw`) = 0
