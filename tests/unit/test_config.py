@@ -24,7 +24,7 @@ class ConfigTests(unittest.TestCase):
         )
         self.assertEqual(
             config.daily_volume_uri("2026-07-19"),
-            "/Volumes/finops_raw/landing/focus/daily/year=2026/month=07/day=19/focus-2026-07-19.parquet",
+            "/Volumes/finops_raw/landing/focus/daily/2026/07/2026-07-19.parquet",
         )
         self.assertEqual(
             config.billing_volume_uri("2026-07"),
@@ -32,7 +32,7 @@ class ConfigTests(unittest.TestCase):
         )
         self.assertEqual(
             config.daily_gcs_month_prefix("2026-07"),
-            "focus/daily/year=2026/month=07/",
+            "focus/daily/2026/07/",
         )
         self.assertEqual(
             config.billing_gcs_object("2026-07"),

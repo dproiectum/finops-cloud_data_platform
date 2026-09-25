@@ -60,7 +60,7 @@ class ArchiveLayoutTests(unittest.TestCase):
         config = load_config("dev", ROOT)
         self.assertEqual(
             config.daily_gcs_month_prefix("2025-01"),
-            "focus/daily/year=2025/month=01/",
+            "focus/daily/2025/01/",
         )
         self.assertEqual(
             config.billing_gcs_object("2025-01"),

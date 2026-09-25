@@ -12,7 +12,7 @@ resources:
       parameters:
         - name: source_uri
           # Safe example; override it from Run now for another day.
-          default: /Volumes/finops_raw/landing/focus/daily/year=2025/month=01/day=01/focus-2025-01-01.parquet
+          default: /Volumes/finops_raw/landing/focus/daily/2026/07/2026-07-01.parquet
       tasks:
         - task_key: daily_incremental
           environment_key: default

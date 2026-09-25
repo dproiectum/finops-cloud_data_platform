@@ -5,7 +5,12 @@ from __future__ import annotations
 import argparse
 import json
 
-from finops_cloud.audit.runs import finish_run, set_month_status, start_run
+from finops_cloud.audit.runs import (
+    finish_run,
+    set_month_status,
+    set_run_month,
+    start_run,
+)
 from finops_cloud.audit.snapshots import ensure_audit_tables
 from finops_cloud.config import load_config
 from finops_cloud.medallion.bronze import add_ingestion_metadata
@@ -36,6 +41,9 @@ def run(environment: str, source_uri: str) -> dict[str, object]:
     try:
         # 2. Bronze keeps source columns and adds technical ingestion metadata.
         raw = spark.read.parquet(source_uri)
+        source_rows = raw.count()
+        if source_rows == 0:
+            raise ValueError(f"Daily source is empty: {source_uri}")
         bronze = add_ingestion_metadata(raw, run_id, "DAILY", "PROVISIONAL")
         bronze_rows = append_new_source_files(
             spark,
@@ -53,6 +61,17 @@ def run(environment: str, source_uri: str) -> dict[str, object]:
 
         # 4. Silver is the canonical FOCUS dataset for downstream consumers.
         canonical = prepare_canonical(validated, config.contract_version)
+        months = sorted(
+            row["billing_month"]
+            for row in canonical.select("billing_month").distinct().collect()
+        )
+        if len(months) != 1:
+            raise ValueError(
+                "One daily source must contain exactly one billing month; "
+                f"source={source_uri}, months={months}"
+            )
+        month = months[0]
+        set_run_month(spark, config, run_id, month)
         assert_month_is_open(spark, config, canonical)
         silver_rows = append_new_source_files(
             spark,
@@ -66,18 +85,20 @@ def run(environment: str, source_uri: str) -> dict[str, object]:
         )
 
         # 5. Refresh affected months in Gold, then rebuild the datamarts.
-        months = [row["billing_month"] for row in canonical.select("billing_month").distinct().collect()]
         silver_table = config.table("silver_canonical", "silver")
-        for month in months:
-            complete_month = month_frame(spark.table(silver_table), month)
-            refresh_gold_for_month(spark, config, complete_month, month)
-            set_month_status(spark, config, month, "OPEN", "DAILY", run_id)
+        complete_month = month_frame(spark.table(silver_table), month)
+        refresh_gold_for_month(spark, config, complete_month, month)
+        set_month_status(spark, config, month, "OPEN", "DAILY", run_id)
         finish_run(spark, config, run_id, "SUCCESS")
         return {
             "run_id": run_id,
+            "environment": config.environment,
+            "source_uri": source_uri,
+            "source_rows": source_rows,
             "bronze_rows_written": bronze_rows,
             "silver_rows_written": silver_rows,
-            "months": sorted(months),
+            "billing_month": month,
+            "months": months,
         }
     except Exception as exc:
         finish_run(spark, config, run_id, "FAILED", str(exc))

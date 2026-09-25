@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[2]
 class NotebookTests(unittest.TestCase):
     def test_notebooks_are_clean_and_valid(self):
         notebooks = sorted((ROOT / "notebooks").rglob("*.ipynb"))
-        self.assertEqual(len(notebooks), 5)
+        self.assertEqual(len(notebooks), 7)
         for path in notebooks:
             notebook = json.loads(path.read_text(encoding="utf-8"))
             self.assertEqual(notebook["nbformat"], 4)
@@ -28,6 +28,15 @@ class NotebookTests(unittest.TestCase):
             "pipelines/01_daily_incremental.ipynb": "finops_cloud.pipelines.daily_incremental import run",
             "pipelines/02_monthly_close.ipynb": "finops_cloud.pipelines.monthly_close import run",
             "pipelines/03_billing_backfill.ipynb": "import finops_cloud.pipelines.billing_backfill as billing_backfill_module",
+        }
+        for name, import_line in expected.items():
+            content = (ROOT / "notebooks" / name).read_text(encoding="utf-8")
+            self.assertIn(import_line, content)
+
+    def test_daily_operation_notebooks_call_maintained_modules(self):
+        expected = {
+            "operations/discover_daily_files.ipynb": "finops_cloud.storage.discover_daily import inventory_daily_files, select_daily_file",
+            "operations/validate_daily_load.ipynb": "finops_cloud.audit.daily_controls import validate_daily_load",
         }
         for name, import_line in expected.items():
             content = (ROOT / "notebooks" / name).read_text(encoding="utf-8")
@@ -72,7 +81,7 @@ class NotebookTests(unittest.TestCase):
         self.assertNotIn("notebook_task:", jobs)
         self.assertNotIn("python_wheel_task:", jobs)
         self.assertIn(
-            "default: /Volumes/finops_raw/landing/focus/daily/year=2025/month=01/day=01/focus-2025-01-01.parquet",
+            "default: /Volumes/finops_raw/landing/focus/daily/2026/07/2026-07-01.parquet",
             jobs,
         )
 

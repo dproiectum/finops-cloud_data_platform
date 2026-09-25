@@ -14,6 +14,10 @@ logic.
 
 ## Operations
 
+- `operations/discover_daily_files.ipynb`: inventory daily Parquets, exclude
+  closed months, and select the oldest source not yet loaded in Silver;
+- `operations/validate_daily_load.ipynb`: reconcile one daily source through
+  Bronze, Silver, Gold, datamarts, OPS, and DEV/PROD when validating PROD;
 - `operations/environment_check.ipynb`: verify selected catalogs, schemas, and
   source Volume before loading.
 - `operations/initialize_empty_data_tables.ipynb`: manually create all 30 empty

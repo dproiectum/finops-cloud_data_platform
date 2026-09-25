@@ -49,6 +49,17 @@ def finish_run(spark, config, run_id: str, status: str, message: str | None = No
     )
 
 
+def set_run_month(spark, config, run_id: str, month: str) -> None:
+    """Attach the validated billing month to an already-started pipeline run."""
+    spark.sql(
+        f"""
+        UPDATE {config.table('pipeline_run', 'ops')}
+        SET billing_month = '{month}'
+        WHERE environment = '{config.environment}' AND run_id = '{run_id}'
+        """
+    )
+
+
 def set_month_status(spark, config, month: str, status: str, source: str, run_id: str) -> None:
     """Upsert the authoritative processing status for one billing month."""
     # One row per month records whether daily ingestion is still allowed.

@@ -5,8 +5,8 @@ name = "finops-cloud-data-platform"
 gcs_bucket = "dtl_finops"
 active_prefix = "focus"
 archive_prefix = "focus_archive"
-daily_path_template = "daily/year={year}/month={month}/day={day}/focus-{date}.parquet"
-daily_month_prefix_template = "daily/year={year}/month={month}/"
+daily_path_template = "daily/{year}/{month}/{date}.parquet"
+daily_month_prefix_template = "daily/{year}/{month}/"
 billing_path_template = "monthly/billing-{billing_month}.parquet"
 archive_daily_after_month_close = false
 archive_billing_after_month_close = false

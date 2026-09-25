@@ -27,7 +27,7 @@ sql/gold/                       Gold DDL and loading SQL
 sql/datamarts/                  Certified datamart SQL
 src/finops_cloud/audit/         Runs, snapshots, and reconciliation
 src/finops_cloud/medallion/     Bronze, Silver, Gold, contract, and Delta logic
-src/finops_cloud/storage/       Optional GCS archival
+src/finops_cloud/storage/       Daily discovery and optional GCS archival
 src/finops_cloud/sql/           SQL loader and renderer
 src/finops_cloud/pipelines/     End-to-end orchestration
 apps/finops_dashboard/          Read-only Streamlit Databricks App
@@ -51,6 +51,11 @@ build and capture the three-task DAG in the Databricks UI.
 After that DEV Job succeeds, follow
 [docs/databricks_prod_promotion.md](docs/databricks_prod_promotion.md) for the
 separate PROD preflight, canary, historical load, and post-load controls.
+
+For provisional daily files in an open month, follow
+[docs/databricks_daily_dev_to_prod.md](docs/databricks_daily_dev_to_prod.md) to
+test discovery, DEV loading, validation, and controlled PROD promotion before
+adding the daily schedule.
 
 After PROD validation, the read-only Streamlit application in
 [`apps/finops_dashboard`](apps/finops_dashboard) exposes the certified datamarts,
@@ -83,6 +88,8 @@ Gold, refreshes the datamarts, and stores the reconciliation in OPS.
 - `01_daily_incremental.ipynb`: ingest a daily provisional file;
 - `02_monthly_close.ipynb`: close one month from billing;
 - `03_billing_backfill.ipynb`: load an inclusive range of billing months;
+- `discover_daily_files.ipynb`: inventory and select the oldest new daily file;
+- `validate_daily_load.ipynb`: block promotion when daily reconciliation fails;
 - `environment_check.ipynb`: validate configuration and required namespaces;
 - `initialize_empty_data_tables.ipynb`: create the 30 empty business tables for
   one selected environment.
