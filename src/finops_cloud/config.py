@@ -157,6 +157,7 @@ def load_config(environment: str, root: Path | None = None) -> PlatformConfig:
     operations = raw["operations"]
     contract = raw["contract"]
     quality = raw["quality"]
+
     config = PlatformConfig(
         environment=environment,
         profile=os.getenv("FINOPS_DATABRICKS_PROFILE", databricks["profile"]),
@@ -190,6 +191,7 @@ def load_config(environment: str, root: Path | None = None) -> PlatformConfig:
         provider=str(quality["provider"]),
         amount_tolerance=str(quality["amount_tolerance"]),
     )
+
     validate_config(config)
     return config
 
