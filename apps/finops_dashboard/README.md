@@ -32,32 +32,39 @@ Select permission **Can use**. `app.yaml` maps that resource to
 `DATABRICKS_WAREHOUSE_ID`; the application resolves its ODBC connection details
 through the Databricks SDK. No warehouse ID, token or hostname is committed.
 
-Grant the app service principal read-only access to the required namespaces:
+In **Databricks Apps > finops-center > Authorization**, copy the app service
+principal's **Service principal ID** (`applicationId`). Do not use the short
+display label such as `app-1wgoyz`; Unity Catalog identifies a service principal
+by its application ID.
+
+Grant that application ID read-only access to the required namespaces:
 
 ```sql
-GRANT USE CATALOG ON CATALOG finops_prod TO `<app-service-principal>`;
-GRANT USE SCHEMA ON SCHEMA finops_prod.datamart TO `<app-service-principal>`;
-GRANT SELECT ON SCHEMA finops_prod.datamart TO `<app-service-principal>`;
+GRANT USE CATALOG ON CATALOG finops_prod TO `<service-principal-application-id>`;
+GRANT USE SCHEMA ON SCHEMA finops_prod.datamart TO `<service-principal-application-id>`;
+GRANT SELECT ON SCHEMA finops_prod.datamart TO `<service-principal-application-id>`;
 
-GRANT USE CATALOG ON CATALOG finops_ops TO `<app-service-principal>`;
-GRANT USE SCHEMA ON SCHEMA finops_ops.audit TO `<app-service-principal>`;
-GRANT SELECT ON SCHEMA finops_ops.audit TO `<app-service-principal>`;
+GRANT USE CATALOG ON CATALOG finops_ops TO `<service-principal-application-id>`;
+GRANT USE SCHEMA ON SCHEMA finops_ops.audit TO `<service-principal-application-id>`;
+GRANT SELECT ON SCHEMA finops_ops.audit TO `<service-principal-application-id>`;
 ```
 
-Replace the placeholder with the service principal created for the app. If your
+Keep the backticks around the application ID. If your
 governance policy requires table-level grants, grant `SELECT` only on the
 datamarts and the `pipeline_run` and `monthly_reconciliation` audit tables.
 
 ## Deployment
 
 1. Pull the latest `main` branch into the Databricks Git Folder.
-2. Open **Databricks Apps** and create a custom app named
-   `finops-control-center`.
-3. Configure the Git source to `apps/finops_dashboard`.
-4. Add the SQL Warehouse resource using the key `sql-warehouse` and permission
+2. Open **Databricks Apps** and create a custom app named `finops-center`.
+3. Configure the project Git repository and the `main` branch.
+4. At deployment, select **From Git** and set **Source code path** exactly to
+   `apps/finops_dashboard`. If replacing a previous deployment, use
+   **Deploy using a different source**.
+5. Add the SQL Warehouse resource using the key `sql-warehouse` and permission
    **Can use**.
-5. Apply the read-only Unity Catalog grants above.
-6. Deploy and inspect the application logs if the health check fails.
+6. Apply the read-only Unity Catalog grants above.
+7. Deploy and inspect the application logs if the health check fails.
 
 The default environment is PROD. A separate deployment can set
 `FINOPS_ENVIRONMENT=dev` and `FINOPS_DATABRICKS_CATALOG=finops_dev` without code
