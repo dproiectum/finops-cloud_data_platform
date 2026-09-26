@@ -39,5 +39,6 @@ cluster is recreated. Photon itself is a cluster setting; the filename only
 documents the configuration used for that benchmark run.
 
 `jobs/daily_dev_to_prod.yml` is the unscheduled Classic daily workflow. It
-discovers one new RAW daily file, validates it in DEV, and keeps PROD promotion
-behind an explicit condition that defaults to `false` for the first test.
+discovers the oldest RAW daily file still missing from PROD, validates it in
+DEV, and promotes it automatically after the DEV controls. Optional date and
+source overrides remain available for recovery only.

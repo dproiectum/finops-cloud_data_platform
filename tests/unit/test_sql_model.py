@@ -259,6 +259,19 @@ class SqlModelTests(unittest.TestCase):
         self.assertNotIn("share/finops_cloud/sql/platform_setup_serverless", data_files)
         self.assertNotIn("share/finops_cloud/sql/platform_setup_classic_be", data_files)
 
+    def test_job_cost_monitoring_supports_exact_and_classic_all_purpose_usage(self):
+        monitoring = platform_text(
+            "common/sql/monitoring/01_job_run_dbu_and_list_cost.sql"
+        )
+        self.assertIn("system.lakeflow.job_run_timeline", monitoring)
+        self.assertIn("system.lakeflow.job_task_run_timeline", monitoring)
+        self.assertIn("system.billing.usage", monitoring)
+        self.assertIn("system.billing.list_prices", monitoring)
+        self.assertIn("usage_metadata.job_run_id", monitoring)
+        self.assertIn("usage_metadata.cluster_id = target_cluster_id", monitoring)
+        self.assertIn("ESTIMATED_RUN_TIME_OVERLAP", monitoring)
+        self.assertIn("GCP Cloud Billing export", monitoring)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -9,7 +9,7 @@ resources:
             notebook_path: /Workspace/Users/thailongdam@gmail.com/finops-cloud_data_platform/platform/common/notebooks/operations/discover_daily_files
             source: WORKSPACE
             base_parameters:
-              environment: dev
+              environment: "{{job.parameters.discovery_environment}}"
               processing_date: "{{job.parameters.processing_date}}"
               source_uri_override: "{{job.parameters.source_uri_override}}"
           existing_cluster_id: 5925-212130-elwuj3uu
@@ -99,9 +99,11 @@ resources:
       queue:
         enabled: true
       parameters:
+        - name: discovery_environment
+          default: prod
         - name: processing_date
           default: ""
         - name: source_uri_override
           default: ""
         - name: promote_to_prod
-          default: "false"
+          default: "true"

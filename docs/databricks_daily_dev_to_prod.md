@@ -33,9 +33,10 @@ ajouter les paramètres :
 
 | Name | Default |
 |---|---|
+| `discovery_environment` | `prod` en exploitation |
 | `processing_date` | vide |
 | `source_uri_override` | vide |
-| `promote_to_prod` | `false` pendant les tests |
+| `promote_to_prod` | `true` en exploitation |
 
 Ne pas créer de paramètre de Job `environment`. Chaque tâche reçoit
 explicitement `dev` ou `prod`.
@@ -78,7 +79,18 @@ validate_daily_prod
 - Type : Notebook
 - Notebook : `platform/common/notebooks/operations/discover_daily_files.ipynb`
 - Compute : celui du scénario retenu
-- aucun paramètre de tâche : les paramètres de Job homonymes sont pushed down.
+- paramètres :
+
+```text
+environment = {{job.parameters.discovery_environment}}
+processing_date = {{job.parameters.processing_date}}
+source_uri_override = {{job.parameters.source_uri_override}}
+```
+
+En exploitation, la découverte utilise `environment=prod`. Elle choisit donc
+le plus ancien fichier absent de PROD, y compris si ce fichier a déjà réussi en
+DEV lors d'une exécution précédente. Les tâches DEV restent placées avant les
+tâches PROD et sont idempotentes.
 
 ### `new_file_gate`
 
@@ -127,9 +139,12 @@ la task value de `discover_daily_files`.
 
 ## 4. Activer l'exploitation quotidienne
 
-1. tester un fichier avec `promote_to_prod=false`;
-2. tester le même fichier avec `promote_to_prod=true`;
-3. fixer ensuite la valeur par défaut à `true`;
+1. pour le test DEV seul, utiliser `discovery_environment=dev` et
+   `promote_to_prod=false`;
+2. après sa réussite, utiliser `discovery_environment=prod` et
+   `promote_to_prod=true`; le Job retrouve automatiquement le fichier encore
+   absent de PROD, sans `source_uri_override`;
+3. conserver ensuite ces deux valeurs comme valeurs par défaut;
 4. ajouter un schedule quotidien après l'heure d'arrivée des fichiers;
 5. conserver les notifications d'échec et les retries techniques;
 6. ne jamais utiliser ce Job pour un mois fermé.

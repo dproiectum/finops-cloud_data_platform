@@ -8,6 +8,7 @@ and Classic Compute:
 - `sql/controls`: reset and blocking DEV/PROD controls;
 - `sql/gold`: Gold table creation and month loading;
 - `sql/datamarts`: certified analytical table refreshes.
+- `sql/monitoring`: Job-run duration, DBU, and list-cost analysis.
 
 Do not copy these files into a scenario folder. Scenario Jobs must reference
 the common paths directly.

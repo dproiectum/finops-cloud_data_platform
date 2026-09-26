@@ -179,7 +179,9 @@ class NotebookTests(unittest.TestCase):
         self.assertIn('left: "{{tasks.discover_daily_files.values.has_new_file}}"', daily)
         self.assertIn('left: "{{job.parameters.promote_to_prod}}"', daily)
         self.assertIn('source_uri: "{{tasks.discover_daily_files.values.source_uri}}"', daily)
-        self.assertIn('default: "false"', daily)
+        self.assertIn('environment: "{{job.parameters.discovery_environment}}"', daily)
+        self.assertIn("name: discovery_environment\n          default: prod", daily)
+        self.assertIn('default: "true"', daily)
         self.assertNotIn("schedule:", daily)
         self.assertNotIn("sql_task:", daily)
 
