@@ -11,7 +11,7 @@ Toutes les opérations restent manuelles. Elle ne supprime ni DEV, ni RAW, ni OP
 4. ne modifier ni le Job DEV validé, ni ses paramètres.
 
 Le chargement PROD utilise les mêmes notebooks et le même Data Contract que DEV.
-Seuls le paramètre `environment` et le contrôle SQL final changent.
+Seuls le paramètre `environment` et le contrôle final changent.
 
 ## 2. Vérifier les accès PROD
 
@@ -32,7 +32,7 @@ Parquet RAW que DEV sans les déplacer.
 
 ## 3. Contrôler l'environnement PROD
 
-Ouvrir `notebooks/operations/environment_check.ipynb`, sélectionner le compute
+Ouvrir `platform/common/notebooks/operations/environment_check.ipynb`, sélectionner le compute
 du scénario retenu, puis exécuter avec :
 
 ```text
@@ -42,10 +42,8 @@ environment = prod
 Le notebook doit afficher `finops_prod`, les quatre schémas, le Volume RAW, les
 tables OPS et la liste des fichiers mensuels.
 
-Exécuter ensuite le contrôle correspondant au scénario :
-
-- Serverless : `sql/platform_setup_serverless/07_validate_prod_ready.sql`;
-- Classic Belgique : `sql/platform_setup_classic_be/08_validate_prod_ready.sql`.
+Exécuter ensuite le contrôle commun
+`platform/common/sql/controls/03_validate_prod_ready.sql`.
 
 Résultats attendus :
 
@@ -85,7 +83,7 @@ check_environment_prod → load_billing_range_prod → validate_loaded_prod
 
 - Type : `Notebook`
 - Source : `Workspace`
-- Notebook : `notebooks/operations/environment_check.ipynb`
+- Notebook : `platform/common/notebooks/operations/environment_check.ipynb`
 - Compute : celui du scénario retenu
 - Depends on : aucun
 
@@ -93,7 +91,7 @@ check_environment_prod → load_billing_range_prod → validate_loaded_prod
 
 - Type : `Notebook`
 - Source : `Workspace`
-- Notebook : `notebooks/pipelines/03_billing_backfill.ipynb`
+- Notebook : `platform/common/notebooks/pipelines/03_billing_backfill.ipynb`
 - Compute : celui du scénario retenu
 - Depends on : `check_environment_prod`
 - Run if dependencies : `All succeeded`
@@ -104,14 +102,28 @@ manuellement une valeur `{{job.parameters...}}`.
 
 ### Tâche `validate_loaded_prod`
 
+En Serverless :
+
 - Type : `SQL`
 - SQL task : `File`
 - Source : `Workspace`
-- File Serverless : `sql/platform_setup_serverless/08_validate_loaded_prod.sql`
-- File Classic Belgique : `sql/platform_setup_classic_be/09_validate_loaded_prod.sql`
-- SQL Warehouse : le Warehouse de validation
+- File : `platform/common/sql/controls/04_validate_loaded_prod.sql`
+- SQL Warehouse : le Warehouse Serverless ou Pro de validation
 - Depends on : `load_billing_range_prod`
 - Run if dependencies : `All succeeded`
+
+En Classic Belgique, utiliser le notebook de validation, car un Job qui contient
+un SQL task sur SQL Warehouse Classic est limité à une seule tâche :
+
+- Type : `Notebook`
+- Source : `Workspace`
+- Notebook : `platform/classic_compute/notebooks/validate_loaded_environment_classic.ipynb`
+- Compute : le même All-Purpose Classic que les tâches précédentes
+- Depends on : `load_billing_range_prod`
+- Run if dependencies : `All succeeded`
+
+Le paramètre Job `environment=prod`, automatiquement transmis au widget, fait
+exécuter `platform/common/sql/controls/04_validate_loaded_prod.sql`.
 
 ## 5. Effectuer un canari sur un mois
 
@@ -154,21 +166,19 @@ couches suivantes remplacent proprement le mois. Résultats complets attendus :
 
 ## 7. Valider l'indépendance DEV/PROD
 
-Le contrôle `validate_loaded_prod.sql` du scénario choisi affiche les nombres
-de runs par environnement dans OPS. Vérifier que DEV et PROD sont présents
-séparément.
+Le contrôle commun `04_validate_loaded_prod.sql` affiche les nombres de runs
+par environnement dans OPS. Vérifier que DEV et PROD sont présents séparément.
 
-Rejouer `platform_setup_serverless/06_validate_loaded_dev.sql` ou
-`platform_setup_classic_be/07_validate_loaded_dev.sql` n'est plus approprié
+Rejouer `platform/common/sql/controls/02_validate_loaded_dev.sql` n'est plus approprié
 après le chargement PROD, car sa dernière assertion exige volontairement que
 PROD soit vide. Les contrôles métier DEV restent consultables dans ses premiers
 résultats, mais le contrôle bloquant officiel de PROD est désormais le fichier
-`validate_loaded_prod.sql` du scénario choisi.
+`platform/common/sql/controls/04_validate_loaded_prod.sql`.
 
 ## 8. Passage en exploitation
 
 Conserver le Job de promotion sans schedule pour les backfills. Pour un nouveau
-mois, utiliser `notebooks/pipelines/02_monthly_close.ipynb` avec
+mois, utiliser `platform/common/notebooks/pipelines/02_monthly_close.ipynb` avec
 `environment=prod` et `month=YYYY-MM`, suivi du contrôle
 `validate_loaded_prod.sql` du scénario choisi.
 

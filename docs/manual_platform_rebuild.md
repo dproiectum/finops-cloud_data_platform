@@ -4,15 +4,14 @@ Cette procédure suit le plan validé en huit phases. Aucun script n’est exéc
 automatiquement par le dépôt. Toutes les commandes destructives restent sous le
 contrôle de l’ingénieur dans Databricks SQL.
 
-Choisir un seul scénario pour tout le workspace :
+Choisir un seul scénario de création pour tout le workspace :
 
-- `sql/platform_setup_serverless` pour Serverless avec Default Storage;
-- `sql/platform_setup_classic_be` pour le compute Classic belge avec le bucket
-  géré `gs://dtl_finops-unitycatalog-euw1`.
+- `platform/serverless` pour Serverless avec Default Storage;
+- `platform/classic_compute` pour le compute Classic belge avec le bucket géré
+  `gs://dtl_finops-unitycatalog-euw1`.
 
-Les deux dossiers contiennent le workflow complet. Ne pas mélanger leurs scripts
-de création. Dans les étapes ci-dessous, utiliser la colonne correspondant au
-scénario choisi.
+Les notebooks et les contrôles partagés sont sous `platform/common`. Ne pas
+mélanger les scripts de création Serverless et Classic.
 
 ## Phase 1 — Architecture cible
 
@@ -38,7 +37,7 @@ Avant toute suppression :
 4. vérifier que le Storage Credential `finops_gcs_storage_dev` et l’External
    Location `finops_gcs` sont disponibles;
 5. pour Classic Belgique, exécuter d’abord
-   `sql/platform_setup_classic_be/00_validate_managed_storage.sql` et valider
+   `platform/classic_compute/sql/00_validate_managed_storage.sql` et valider
    le credential `finops_uc_storage_be`, l’External Location
    `finops_uc_managed_be` et le bucket géré régional.
 
@@ -49,12 +48,8 @@ supprimées avec leurs catalogues.
 
 ## Phase 3 — Suppression des quatre catalogues
 
-Ouvrir le script de suppression du scénario choisi :
-
-- Serverless :
-  `sql/platform_setup_serverless/00_drop_all_project_catalogs.sql`;
-- Classic Belgique :
-  `sql/platform_setup_classic_be/01_drop_all_project_catalogs.sql`.
+Ouvrir le contrôle commun
+`platform/common/sql/controls/00_drop_all_project_catalogs.sql`.
 
 Lire puis exécuter les quatre instructions `DROP CATALOG ... CASCADE` une par
 une. Dans le workspace Classic, utiliser un notebook SQL attaché au compute All
@@ -81,10 +76,10 @@ et dans cet ordre :
 
 | Objet | Serverless | Classic Belgique |
 |---|---|---|
-| RAW | `platform_setup_serverless/01_create_raw.sql` | `platform_setup_classic_be/02_create_raw.sql` |
-| DEV | `platform_setup_serverless/02_create_dev.sql` | `platform_setup_classic_be/03_create_dev.sql` |
-| PROD | `platform_setup_serverless/03_create_prod.sql` | `platform_setup_classic_be/04_create_prod.sql` |
-| OPS | `platform_setup_serverless/04_create_ops.sql` | `platform_setup_classic_be/05_create_ops.sql` |
+| RAW | `platform/serverless/sql/01_create_raw.sql` | `platform/classic_compute/sql/01_create_raw.sql` |
+| DEV | `platform/serverless/sql/02_create_dev.sql` | `platform/classic_compute/sql/02_create_dev.sql` |
+| PROD | `platform/serverless/sql/03_create_prod.sql` | `platform/classic_compute/sql/03_create_prod.sql` |
+| OPS | `platform/serverless/sql/04_create_ops.sql` | `platform/classic_compute/sql/04_create_ops.sql` |
 
 Dans le workspace classique belge, le métastore n'a pas d'emplacement géré par
 défaut. Chaque catalogue utilise donc un sous-chemin dédié du bucket régional
@@ -99,14 +94,14 @@ leurs quatre schémas, et OPS contient cinq tables vides.
 
 ### 4.2 Vérifier l’infrastructure
 
-Ouvrir `notebooks/operations/environment_check.ipynb`, définir
+Ouvrir `platform/common/notebooks/operations/environment_check.ipynb`, définir
 `ENVIRONMENT = "dev"`, attacher le compute correspondant au scénario et
 exécuter toutes les cellules. Refaire le contrôle avec `ENVIRONMENT = "prod"`.
 Ce notebook ne crée et ne charge aucun objet.
 
 ### 4.3 Créer les tables métier vides
 
-Ouvrir `notebooks/operations/initialize_empty_data_tables.ipynb`, puis exécuter
+Ouvrir `platform/common/notebooks/operations/initialize_empty_data_tables.ipynb`, puis exécuter
 une première fois avec :
 
 ```python
@@ -126,11 +121,8 @@ déjà une ligne.
 
 ### 4.4 Prouver que la plateforme est vide
 
-Exécuter le contrôle du scénario choisi :
-
-- Serverless : `sql/platform_setup_serverless/05_validate_empty_platform.sql`;
-- Classic Belgique :
-  `sql/platform_setup_classic_be/06_validate_empty_platform.sql`.
+Exécuter le contrôle commun
+`platform/common/sql/controls/01_validate_empty_platform.sql`.
 
 Résultats attendus :
 
@@ -141,12 +133,12 @@ Résultats attendus :
 
 ## Phase 5 — Chargement manuel DEV
 
-Ouvrir `notebooks/pipelines/03_billing_backfill.ipynb` et définir la période :
+Ouvrir `platform/common/notebooks/pipelines/03_billing_backfill.ipynb` et définir la période :
 
 ```python
 ENVIRONMENT = "dev"
 START_MONTH = "2025-01"
-END_MONTH = "2025-12"
+END_MONTH = "2026-06"
 ```
 
 Choisir `START_MONTH` et `END_MONTH` à partir de la liste obtenue dans RAW. La
@@ -173,10 +165,8 @@ Après la réussite du chargement manuel et de la phase 6, suivre
 
 ## Phase 6 — Contrôles
 
-Exécuter le contrôle chargé DEV du scénario choisi :
-
-- Serverless : `sql/platform_setup_serverless/06_validate_loaded_dev.sql`;
-- Classic Belgique : `sql/platform_setup_classic_be/07_validate_loaded_dev.sql`.
+Exécuter le contrôle commun
+`platform/common/sql/controls/02_validate_loaded_dev.sql`.
 
 Contrôles structurels :
 
@@ -223,14 +213,12 @@ Après validation du DAG DEV et des captures, suivre la procédure détaillée
 `docs/databricks_prod_promotion.md` :
 
 - préparer les autorisations PROD;
-- exécuter `platform_setup_serverless/07_validate_prod_ready.sql` ou
-  `platform_setup_classic_be/08_validate_prod_ready.sql` avant le premier
-  chargement PROD;
+- exécuter `platform/common/sql/controls/03_validate_prod_ready.sql` avant le
+  premier chargement PROD;
 - conserver le Job DEV strictement en `environment=dev`, car son contrôle
-  `06_validate_loaded_dev.sql` est volontairement spécifique à DEV;
+  `02_validate_loaded_dev.sql` est volontairement spécifique à DEV;
 - créer un Job PROD séparé et utiliser
-  `platform_setup_serverless/08_validate_loaded_prod.sql` ou
-  `platform_setup_classic_be/09_validate_loaded_prod.sql`;
+  `platform/common/sql/controls/04_validate_loaded_prod.sql`;
 - effectuer un canari PROD sur un mois avant le backfill complet;
 - conserver RAW commun et l'archivage désactivé;
 - surveiller les runs DEV/PROD dans `finops_ops.audit`;

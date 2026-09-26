@@ -2,7 +2,7 @@ bundle:
   name: finops-cloud-data-platform
 
 include:
-  - resources/*.yml
+  - platform/serverless/jobs/pipeline_jobs.yml
 
 variables:
   environment:

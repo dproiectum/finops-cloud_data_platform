@@ -1,4 +1,4 @@
--- STEP 09 - Read-only controls after a PROD canary or historical load.
+-- COMMON CONTROL 04 - Read-only controls after a PROD canary or historical load.
 
 SELECT 'bronze.focus_billing_raw' AS table_name, count(*) AS row_count
 FROM `finops_prod`.`bronze`.`focus_billing_raw`

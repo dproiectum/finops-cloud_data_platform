@@ -1,4 +1,4 @@
--- STEP 06 - Read-only checks after running 03_billing_backfill.ipynb.
+-- COMMON CONTROL 02 - Read-only DEV checks after running 03_billing_backfill.ipynb.
 
 SELECT 'bronze.focus_billing_raw' AS table_name, count(*) AS row_count
 FROM `finops_dev`.`bronze`.`focus_billing_raw`
@@ -280,4 +280,3 @@ SELECT assert_true(
        WHERE environment = 'prod') = 0,
   'CONTROL FAILED: PROD is no longer empty'
 );
-

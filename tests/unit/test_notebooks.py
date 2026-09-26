@@ -1,15 +1,19 @@
 import json
 from pathlib import Path
+import re
 import unittest
 
 
 ROOT = Path(__file__).resolve().parents[2]
+COMMON_NOTEBOOKS = ROOT / "platform/common/notebooks"
+CLASSIC_NOTEBOOKS = ROOT / "platform/classic_compute/notebooks"
 
 
 class NotebookTests(unittest.TestCase):
-    def test_notebooks_are_clean_and_valid(self):
-        notebooks = sorted((ROOT / "notebooks").rglob("*.ipynb"))
-        self.assertEqual(len(notebooks), 7)
+    def test_notebooks_are_clean_valid_and_platform_scoped(self):
+        notebooks = sorted((ROOT / "platform").rglob("*.ipynb"))
+        self.assertEqual(len(notebooks), 8)
+        self.assertFalse((ROOT / "notebooks").exists())
         for path in notebooks:
             notebook = json.loads(path.read_text(encoding="utf-8"))
             self.assertEqual(notebook["nbformat"], 4)
@@ -25,25 +29,42 @@ class NotebookTests(unittest.TestCase):
 
     def test_pipeline_notebooks_call_maintained_job_modules(self):
         expected = {
-            "pipelines/01_daily_incremental.ipynb": "finops_cloud.pipelines.daily_incremental import run",
+            "pipelines/01_daily_incremental.ipynb": (
+                "finops_cloud.pipelines.daily_incremental import run"
+            ),
             "pipelines/02_monthly_close.ipynb": "finops_cloud.pipelines.monthly_close import run",
-            "pipelines/03_billing_backfill.ipynb": "import finops_cloud.pipelines.billing_backfill as billing_backfill_module",
+            "pipelines/03_billing_backfill.ipynb": (
+                "import finops_cloud.pipelines.billing_backfill as billing_backfill_module"
+            ),
         }
         for name, import_line in expected.items():
-            content = (ROOT / "notebooks" / name).read_text(encoding="utf-8")
+            content = (COMMON_NOTEBOOKS / name).read_text(encoding="utf-8")
             self.assertIn(import_line, content)
 
     def test_daily_operation_notebooks_call_maintained_modules(self):
         expected = {
-            "operations/discover_daily_files.ipynb": "finops_cloud.storage.discover_daily import inventory_daily_files, select_daily_file",
-            "operations/validate_daily_load.ipynb": "finops_cloud.audit.daily_controls import validate_daily_load",
+            "operations/discover_daily_files.ipynb": (
+                "finops_cloud.storage.discover_daily import inventory_daily_files, "
+                "select_daily_file"
+            ),
+            "operations/validate_daily_load.ipynb": (
+                "finops_cloud.audit.daily_controls import validate_daily_load"
+            ),
         }
         for name, import_line in expected.items():
-            content = (ROOT / "notebooks" / name).read_text(encoding="utf-8")
+            content = (COMMON_NOTEBOOKS / name).read_text(encoding="utf-8")
             self.assertIn(import_line, content)
 
+    def test_classic_validation_notebook_forces_common_sql_assertions(self):
+        content = (
+            CLASSIC_NOTEBOOKS / "validate_loaded_environment_classic.ipynb"
+        ).read_text(encoding="utf-8")
+        self.assertIn("controls/02_validate_loaded_dev.sql", content)
+        self.assertIn("controls/04_validate_loaded_prod.sql", content)
+        self.assertIn("rows = result.collect()", content)
+
     def test_environment_check_verifies_raw_and_operations_objects(self):
-        content = (ROOT / "notebooks/operations/environment_check.ipynb").read_text(
+        content = (COMMON_NOTEBOOKS / "operations/environment_check.ipynb").read_text(
             encoding="utf-8"
         )
         self.assertIn("ensure_audit_tables", content)
@@ -53,7 +74,7 @@ class NotebookTests(unittest.TestCase):
 
     def test_empty_table_initialization_is_explicit_and_calls_maintained_code(self):
         content = (
-            ROOT / "notebooks/operations/initialize_empty_data_tables.ipynb"
+            COMMON_NOTEBOOKS / "operations/initialize_empty_data_tables.ipynb"
         ).read_text(encoding="utf-8")
         self.assertIn(
             "finops_cloud.medallion.initialize import initialize_empty_tables",
@@ -68,12 +89,14 @@ class NotebookTests(unittest.TestCase):
             "pipelines/02_monthly_close.ipynb",
             "pipelines/03_billing_backfill.ipynb",
         ):
-            content = (ROOT / "notebooks" / name).read_text(encoding="utf-8")
+            content = (COMMON_NOTEBOOKS / name).read_text(encoding="utf-8")
             self.assertNotIn('widgets.dropdown(\\"archive\\"', content)
             self.assertNotIn("ARCHIVE =", content)
 
     def test_bundle_jobs_use_git_python_scripts(self):
-        jobs = (ROOT / "resources/jobs.yml").read_text(encoding="utf-8")
+        jobs = (ROOT / "platform/serverless/jobs/pipeline_jobs.yml").read_text(
+            encoding="utf-8"
+        )
         self.assertEqual(jobs.count("spark_python_task:"), 3)
         self.assertEqual(jobs.count("source: GIT"), 3)
         self.assertEqual(jobs.count("git_source:"), 3)
@@ -84,6 +107,31 @@ class NotebookTests(unittest.TestCase):
             "default: /Volumes/finops_raw/landing/focus/daily/2026/07/2026-07-01.parquet",
             jobs,
         )
+
+    def test_manual_full_load_jobs_match_their_compute_scenarios(self):
+        serverless = (
+            ROOT / "platform/serverless/jobs/billing_full_load_by_month.yml"
+        ).read_text(encoding="utf-8")
+        classic = (
+            ROOT / "platform/classic_compute/jobs/billing_full_load_by_month.yml"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("sql_task:", serverless)
+        self.assertIn("warehouse_id: 81cb90d52797f414", serverless)
+        self.assertNotIn("existing_cluster_id:", serverless)
+        self.assertNotIn("sql_task:", classic)
+        self.assertEqual(classic.count("existing_cluster_id: 5925-212130-elwuj3uu"), 3)
+        self.assertIn("validate_loaded_environment_classic", classic)
+
+        for content in (serverless, classic):
+            notebook_paths = re.findall(
+                r"notebook_path: .*/finops-cloud_data_platform/(.+)", content
+            )
+            sql_paths = re.findall(r"path: .*/finops-cloud_data_platform/(.+\.sql)", content)
+            for relative_path in notebook_paths:
+                self.assertTrue((ROOT / f"{relative_path}.ipynb").is_file(), relative_path)
+            for relative_path in sql_paths:
+                self.assertTrue((ROOT / relative_path).is_file(), relative_path)
 
     def test_python_script_entry_points_call_maintained_modules(self):
         expected = {

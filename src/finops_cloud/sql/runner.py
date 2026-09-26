@@ -41,7 +41,11 @@ def sql_text(relative_path: str) -> str:
 
     # FINOPS_SQL_ROOT supports CI or alternative layouts without code changes.
     configured_root = os.getenv("FINOPS_SQL_ROOT")
-    source_root = Path(configured_root).resolve() if configured_root else _PROJECT_ROOT / "sql"
+    source_root = (
+        Path(configured_root).resolve()
+        if configured_root
+        else _PROJECT_ROOT / "platform" / "common" / "sql"
+    )
     source_file = source_root / requested
     if source_file.is_file():
         return source_file.read_text(encoding="utf-8")

@@ -7,12 +7,21 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 
 from finops_cloud.config import load_config  # noqa: E402
-from finops_cloud.sql.runner import placeholders, render_sql, sql_text, table_context  # noqa: E402
 from finops_cloud.medallion.gold import (  # noqa: E402
     DATAMART_SCRIPTS,
     GOLD_DDL,
     GOLD_LOAD_SCRIPTS,
 )
+from finops_cloud.sql.runner import (  # noqa: E402
+    placeholders,
+    render_sql,
+    sql_text,
+    table_context,
+)
+
+
+def platform_text(relative_path: str) -> str:
+    return (ROOT / "platform" / relative_path).read_text(encoding="utf-8")
 
 
 class SqlModelTests(unittest.TestCase):
@@ -59,17 +68,17 @@ class SqlModelTests(unittest.TestCase):
         fact_sql = render_sql(GOLD_LOAD_SCRIPTS[-1], values)
         self.assertIn("REPLACE WHERE billing_month = '2026-07'", fact_sql)
 
-    def test_operations_sql_is_environment_aware(self):
+    def test_operations_sql_is_environment_aware_in_both_scenarios(self):
         for relative_path in (
-            "platform_setup_serverless/04_create_ops.sql",
-            "platform_setup_classic_be/05_create_ops.sql",
+            "serverless/sql/04_create_ops.sql",
+            "classic_compute/sql/04_create_ops.sql",
         ):
             with self.subTest(relative_path=relative_path):
-                rendered = render_sql(relative_path, {})
-                self.assertEqual(placeholders(rendered), set())
-                self.assertEqual(rendered.count("environment STRING"), 5)
-                self.assertIn("CREATE CATALOG IF NOT EXISTS `finops_ops`", rendered)
-                self.assertEqual(rendered.count("`finops_ops`.`audit`."), 5)
+                setup = platform_text(relative_path)
+                self.assertEqual(placeholders(setup), set())
+                self.assertEqual(setup.count("environment STRING"), 5)
+                self.assertIn("CREATE CATALOG IF NOT EXISTS `finops_ops`", setup)
+                self.assertEqual(setup.count("`finops_ops`.`audit`."), 5)
 
     def test_monthly_fact_load_replaces_instead_of_appending(self):
         fact_load = sql_text("gold/data_loading/30_replace_fact_month.sql")
@@ -80,67 +89,61 @@ class SqlModelTests(unittest.TestCase):
             self.assertIn("CREATE OR REPLACE TABLE", sql_text(relative_path))
 
     def test_full_reset_drops_exactly_the_four_project_catalogs(self):
-        for relative_path in (
-            "platform_setup_serverless/00_drop_all_project_catalogs.sql",
-            "platform_setup_classic_be/01_drop_all_project_catalogs.sql",
-        ):
-            with self.subTest(relative_path=relative_path):
-                reset = sql_text(relative_path)
-                for catalog in ("finops_raw", "finops_dev", "finops_prod", "finops_ops"):
-                    self.assertIn(f"DROP CATALOG IF EXISTS `{catalog}` CASCADE", reset)
-                self.assertEqual(reset.count("DROP CATALOG IF EXISTS"), 4)
-                for protected in ("main", "system", "samples"):
-                    self.assertNotIn(f"DROP CATALOG IF EXISTS `{protected}`", reset)
+        reset = sql_text("controls/00_drop_all_project_catalogs.sql")
+        for catalog in ("finops_raw", "finops_dev", "finops_prod", "finops_ops"):
+            self.assertIn(f"DROP CATALOG IF EXISTS `{catalog}` CASCADE", reset)
+        self.assertEqual(reset.count("DROP CATALOG IF EXISTS"), 4)
+        for protected in ("main", "system", "samples"):
+            self.assertNotIn(f"DROP CATALOG IF EXISTS `{protected}`", reset)
 
-    def test_platform_setup_scenarios_have_unambiguous_orders(self):
+    def test_platform_tree_has_three_unambiguous_themes(self):
         expected = {
-            "platform_setup_serverless": [
-                "00_drop_all_project_catalogs.sql",
+            "serverless/sql": [
                 "01_create_raw.sql",
                 "02_create_dev.sql",
                 "03_create_prod.sql",
                 "04_create_ops.sql",
-                "05_validate_empty_platform.sql",
-                "06_validate_loaded_dev.sql",
-                "07_validate_prod_ready.sql",
-                "08_validate_loaded_prod.sql",
             ],
-            "platform_setup_classic_be": [
+            "classic_compute/sql": [
                 "00_validate_managed_storage.sql",
-                "01_drop_all_project_catalogs.sql",
-                "02_create_raw.sql",
-                "03_create_dev.sql",
-                "04_create_prod.sql",
-                "05_create_ops.sql",
-                "06_validate_empty_platform.sql",
-                "07_validate_loaded_dev.sql",
-                "08_validate_prod_ready.sql",
-                "09_validate_loaded_prod.sql",
+                "01_create_raw.sql",
+                "02_create_dev.sql",
+                "03_create_prod.sql",
+                "04_create_ops.sql",
+            ],
+            "common/sql/controls": [
+                "00_drop_all_project_catalogs.sql",
+                "01_validate_empty_platform.sql",
+                "02_validate_loaded_dev.sql",
+                "03_validate_prod_ready.sql",
+                "04_validate_loaded_prod.sql",
             ],
         }
         for directory, filenames in expected.items():
             with self.subTest(directory=directory):
-                scripts = sorted((ROOT / "sql" / directory).glob("*.sql"))
+                scripts = sorted((ROOT / "platform" / directory).glob("*.sql"))
                 self.assertEqual([path.name for path in scripts], filenames)
+
+        self.assertFalse((ROOT / "sql").exists())
 
     def test_raw_setups_verify_the_same_registered_volume_locations(self):
         for relative_path in (
-            "platform_setup_serverless/01_create_raw.sql",
-            "platform_setup_classic_be/02_create_raw.sql",
+            "serverless/sql/01_create_raw.sql",
+            "classic_compute/sql/01_create_raw.sql",
         ):
             with self.subTest(relative_path=relative_path):
-                raw_setup = sql_text(relative_path)
+                raw_setup = platform_text(relative_path)
                 self.assertIn("DESCRIBE VOLUME `finops_raw`.`landing`.`focus`", raw_setup)
                 self.assertIn("LIST '/Volumes/finops_raw/landing/focus/monthly'", raw_setup)
 
     def test_classic_catalogs_have_managed_gcs_locations(self):
         for script, catalog in (
-            ("02_create_raw.sql", "finops_raw"),
-            ("03_create_dev.sql", "finops_dev"),
-            ("04_create_prod.sql", "finops_prod"),
-            ("05_create_ops.sql", "finops_ops"),
+            ("01_create_raw.sql", "finops_raw"),
+            ("02_create_dev.sql", "finops_dev"),
+            ("03_create_prod.sql", "finops_prod"),
+            ("04_create_ops.sql", "finops_ops"),
         ):
-            setup = sql_text(f"platform_setup_classic_be/{script}")
+            setup = platform_text(f"classic_compute/sql/{script}")
             self.assertIn(
                 f"CREATE CATALOG IF NOT EXISTS `{catalog}`\n"
                 "MANAGED LOCATION "
@@ -156,87 +159,50 @@ class SqlModelTests(unittest.TestCase):
             "04_create_ops.sql",
         ):
             with self.subTest(script=script):
-                setup = sql_text(f"platform_setup_serverless/{script}")
+                setup = platform_text(f"serverless/sql/{script}")
                 self.assertNotIn("MANAGED LOCATION", setup)
 
     def test_classic_preflight_registers_only_the_managed_data_bucket(self):
-        preflight = sql_text("platform_setup_classic_be/00_validate_managed_storage.sql")
+        preflight = platform_text("classic_compute/sql/00_validate_managed_storage.sql")
         self.assertIn("WITH (STORAGE CREDENTIAL `finops_uc_storage_be`)", preflight)
         self.assertIn("CREATE EXTERNAL LOCATION IF NOT EXISTS `finops_uc_managed_be`", preflight)
         self.assertIn("gs://dtl_finops-unitycatalog-euw1", preflight)
         self.assertNotIn("gs://dtl_finops/focus", preflight)
 
     def test_dev_and_prod_create_the_same_processing_schemas(self):
-        for directory, dev_script, prod_script in (
-            ("platform_setup_serverless", "02_create_dev.sql", "03_create_prod.sql"),
-            ("platform_setup_classic_be", "03_create_dev.sql", "04_create_prod.sql"),
-        ):
-            dev = sql_text(f"{directory}/{dev_script}")
-            prod = sql_text(f"{directory}/{prod_script}")
+        for directory in ("serverless/sql", "classic_compute/sql"):
+            dev = platform_text(f"{directory}/02_create_dev.sql")
+            prod = platform_text(f"{directory}/03_create_prod.sql")
             for schema in ("bronze", "silver", "gold", "datamart"):
                 self.assertIn(f"`finops_dev`.`{schema}`", dev)
                 self.assertIn(f"`finops_prod`.`{schema}`", prod)
 
     def test_empty_platform_validation_checks_all_sixty_business_tables(self):
-        for relative_path in (
-            "platform_setup_serverless/05_validate_empty_platform.sql",
-            "platform_setup_classic_be/06_validate_empty_platform.sql",
-        ):
-            with self.subTest(relative_path=relative_path):
-                validation = sql_text(relative_path)
-                self.assertEqual(validation.count("SELECT 'finops_dev."), 30)
-                self.assertEqual(validation.count("SELECT 'finops_prod."), 30)
+        validation = sql_text("controls/01_validate_empty_platform.sql")
+        self.assertEqual(validation.count("SELECT 'finops_dev."), 30)
+        self.assertEqual(validation.count("SELECT 'finops_prod."), 30)
 
     def test_loaded_validation_contains_blocking_job_assertions(self):
-        for relative_path in (
-            "platform_setup_serverless/06_validate_loaded_dev.sql",
-            "platform_setup_classic_be/07_validate_loaded_dev.sql",
-        ):
-            with self.subTest(relative_path=relative_path):
-                validation = sql_text(relative_path)
-                self.assertGreaterEqual(validation.count("assert_true("), 7)
-                self.assertIn("CONTROL FAILED: PROD is no longer empty", validation)
+        validation = sql_text("controls/02_validate_loaded_dev.sql")
+        self.assertGreaterEqual(validation.count("assert_true("), 7)
+        self.assertIn("CONTROL FAILED: PROD is no longer empty", validation)
 
     def test_prod_preflight_is_empty_and_environment_scoped(self):
-        for relative_path in (
-            "platform_setup_serverless/07_validate_prod_ready.sql",
-            "platform_setup_classic_be/08_validate_prod_ready.sql",
-        ):
-            with self.subTest(relative_path=relative_path):
-                preflight = sql_text(relative_path)
-                self.assertIn("30-table inventory", preflight)
-                self.assertGreaterEqual(preflight.count("assert_true("), 3)
-                self.assertIn("environment = 'prod'", preflight)
-                self.assertNotIn("DROP CATALOG", preflight)
+        preflight = sql_text("controls/03_validate_prod_ready.sql")
+        self.assertIn("30-table inventory", preflight)
+        self.assertGreaterEqual(preflight.count("assert_true("), 3)
+        self.assertIn("environment = 'prod'", preflight)
+        self.assertNotIn("DROP CATALOG", preflight)
 
     def test_prod_loaded_validation_has_blocking_controls(self):
-        for relative_path in (
-            "platform_setup_serverless/08_validate_loaded_prod.sql",
-            "platform_setup_classic_be/09_validate_loaded_prod.sql",
-        ):
-            with self.subTest(relative_path=relative_path):
-                validation = sql_text(relative_path)
-                self.assertGreaterEqual(validation.count("assert_true("), 8)
-                self.assertIn("latest PROD pipeline run is not successful", validation)
-                self.assertIn("PROD Silver still contains a null ServiceName", validation)
-                self.assertIn("environment = 'prod'", validation)
-                self.assertNotIn("`finops_dev`", validation)
+        validation = sql_text("controls/04_validate_loaded_prod.sql")
+        self.assertGreaterEqual(validation.count("assert_true("), 8)
+        self.assertIn("latest PROD pipeline run is not successful", validation)
+        self.assertIn("PROD Silver still contains a null ServiceName", validation)
+        self.assertIn("environment = 'prod'", validation)
+        self.assertNotIn("`finops_dev`", validation)
 
-    def test_common_controls_are_identical_between_scenarios(self):
-        pairs = (
-            ("05_validate_empty_platform.sql", "06_validate_empty_platform.sql"),
-            ("06_validate_loaded_dev.sql", "07_validate_loaded_dev.sql"),
-            ("07_validate_prod_ready.sql", "08_validate_prod_ready.sql"),
-            ("08_validate_loaded_prod.sql", "09_validate_loaded_prod.sql"),
-        )
-        for serverless_script, classic_script in pairs:
-            serverless = sql_text(f"platform_setup_serverless/{serverless_script}")
-            classic = sql_text(f"platform_setup_classic_be/{classic_script}")
-            serverless_body = "\n".join(serverless.splitlines()[1:]).rstrip()
-            classic_body = "\n".join(classic.splitlines()[1:]).rstrip()
-            self.assertEqual(serverless_body, classic_body)
-
-    def test_wheel_configuration_embeds_root_sql_directories(self):
+    def test_wheel_configuration_embeds_only_common_runtime_sql(self):
         with (ROOT / "pyproject.toml").open("rb") as stream:
             project = tomllib.load(stream)
         data_files = project["tool"]["setuptools"]["data-files"]
@@ -246,25 +212,27 @@ class SqlModelTests(unittest.TestCase):
             ["contracts/focus_cost_usage/v1.0.0/*.yaml"],
         )
         self.assertEqual(
+            data_files["share/finops_cloud/sql"],
+            ["platform/common/sql/README.md"],
+        )
+        self.assertEqual(
+            data_files["share/finops_cloud/sql/controls"],
+            ["platform/common/sql/controls/*.sql"],
+        )
+        self.assertEqual(
             data_files["share/finops_cloud/sql/gold/table_creation"],
-            ["sql/gold/table_creation/*.sql"],
+            ["platform/common/sql/gold/table_creation/*.sql"],
         )
         self.assertEqual(
             data_files["share/finops_cloud/sql/gold/data_loading"],
-            ["sql/gold/data_loading/*.sql"],
+            ["platform/common/sql/gold/data_loading/*.sql"],
         )
         self.assertEqual(
             data_files["share/finops_cloud/sql/datamarts/table_refresh"],
-            ["sql/datamarts/table_refresh/*.sql"],
+            ["platform/common/sql/datamarts/table_refresh/*.sql"],
         )
-        self.assertEqual(
-            data_files["share/finops_cloud/sql/platform_setup_serverless"],
-            ["sql/platform_setup_serverless/*.sql"],
-        )
-        self.assertEqual(
-            data_files["share/finops_cloud/sql/platform_setup_classic_be"],
-            ["sql/platform_setup_classic_be/*.sql"],
-        )
+        self.assertNotIn("share/finops_cloud/sql/platform_setup_serverless", data_files)
+        self.assertNotIn("share/finops_cloud/sql/platform_setup_classic_be", data_files)
 
 
 if __name__ == "__main__":

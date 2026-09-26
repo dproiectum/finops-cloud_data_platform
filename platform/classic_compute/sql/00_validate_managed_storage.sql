@@ -1,4 +1,4 @@
--- STEP 00 - Register and inspect the dedicated Belgian managed-data location.
+-- CLASSIC COMPUTE STEP 00 - Register and inspect the Belgian managed-data location.
 -- Prerequisite: create the GCS bucket in europe-west1, create the Storage
 -- Credential finops_uc_storage_be, and grant its generated service account
 -- read/write/delete object access on the bucket.
@@ -12,4 +12,3 @@ DESCRIBE STORAGE CREDENTIAL `finops_uc_storage_be`;
 DESCRIBE EXTERNAL LOCATION `finops_uc_managed_be`;
 SHOW GRANTS ON EXTERNAL LOCATION `finops_uc_managed_be`;
 LIST 'gs://dtl_finops-unitycatalog-euw1';
-

@@ -1,4 +1,4 @@
--- STEP 03 - Recreate the empty DEV catalog and its four processing schemas.
+-- CLASSIC COMPUTE STEP 02 - Recreate the empty DEV catalog and its four processing schemas.
 
 CREATE CATALOG IF NOT EXISTS `finops_dev`
 MANAGED LOCATION 'gs://dtl_finops-unitycatalog-euw1/catalogs/finops_dev'
@@ -15,4 +15,3 @@ COMMENT 'FinOps dimensional model';
 
 CREATE SCHEMA IF NOT EXISTS `finops_dev`.`datamart`
 COMMENT 'Certified analytical tables';
-

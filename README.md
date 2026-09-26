@@ -18,14 +18,12 @@ PROD can independently consume exactly the same source files.
 ## Repository layout
 
 ```text
+platform/serverless/            Default Storage setup and Serverless Jobs
+platform/classic_compute/       Managed GCS setup and Classic Job adapter
+platform/common/notebooks/      Pipeline and operational notebooks shared by both
+platform/common/sql/            Controls, Gold, and datamart SQL shared by both
 config/                         Environment and common RAW/OPS configuration
 contracts/                      Versioned FOCUS Data Contract
-notebooks/pipelines/            Manual pipeline entry points
-notebooks/operations/           Environment and prerequisite checks
-sql/platform_setup_serverless/  Complete Serverless rebuild and validation workflow
-sql/platform_setup_classic_be/  Complete Belgian Classic-compute workflow
-sql/gold/                       Gold DDL and loading SQL
-sql/datamarts/                  Certified datamart SQL
 src/finops_cloud/audit/         Runs, snapshots, and reconciliation
 src/finops_cloud/medallion/     Bronze, Silver, Gold, contract, and Delta logic
 src/finops_cloud/storage/       Daily discovery and optional GCS archival
@@ -38,10 +36,10 @@ apps/finops_dashboard/          Read-only Streamlit Databricks App
 
 Follow [docs/manual_platform_rebuild.md](docs/manual_platform_rebuild.md).
 The structure-only notebook is
-`notebooks/operations/initialize_empty_data_tables.ipynb`; run it once for DEV
-and once for PROD before loading. The important entry point for a historical
-monthly load is
-`notebooks/pipelines/03_billing_backfill.ipynb`: choose `environment`,
+`platform/common/notebooks/operations/initialize_empty_data_tables.ipynb`; run
+it once for DEV and once for PROD before loading. The important entry point for
+a historical monthly load is
+`platform/common/notebooks/pipelines/03_billing_backfill.ipynb`: choose `environment`,
 `start_month`, and `end_month`, then run each cell. RAW archival is disabled by
 the common configuration.
 

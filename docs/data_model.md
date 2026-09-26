@@ -8,9 +8,9 @@ controls, while Gold exposes a stable BI model.
 
 Executable SQL is organized by purpose:
 
-- `sql/gold/table_creation` for Gold DDL;
-- `sql/gold/data_loading` for Gold loads;
-- `sql/datamarts/table_refresh` for the fourteen analytical products.
+- `platform/common/sql/gold/table_creation` for Gold DDL;
+- `platform/common/sql/gold/data_loading` for Gold loads;
+- `platform/common/sql/datamarts/table_refresh` for the fourteen analytical products.
 
 These files are the project's source of truth and are embedded as data in the
 Python wheel. PySpark invokes them in order without redefining business logic.

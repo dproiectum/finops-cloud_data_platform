@@ -22,11 +22,9 @@ logic.
   source Volume before loading.
 - `operations/initialize_empty_data_tables.ipynb`: manually create all 30 empty
   business tables in DEV or PROD after a complete reset.
-
 Automatic archival has no active notebook or Job because RAW is consumed by
 both DEV and PROD.
 
-Catalog creation, the four-catalog reset, and validations are deliberately kept
-as visible, ordered SQL scripts under either `sql/platform_setup_serverless`
-or `sql/platform_setup_classic_be`. Select one scenario for the workspace and
-run it manually by following `docs/manual_platform_rebuild.md`.
+Catalog creation is scenario-specific under `platform/serverless` or
+`platform/classic_compute`. Reset and validation controls are shared under
+`platform/common/sql/controls`. Follow `docs/manual_platform_rebuild.md`.

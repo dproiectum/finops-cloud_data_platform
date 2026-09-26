@@ -1,4 +1,4 @@
--- STEP 02 - Recreate the empty DEV catalog and its four processing schemas.
+-- SERVERLESS STEP 02 - Recreate the empty DEV catalog and its four processing schemas.
 
 CREATE CATALOG IF NOT EXISTS `finops_dev`
 COMMENT 'DEV business data for the FinOps platform';
@@ -14,4 +14,3 @@ COMMENT 'FinOps dimensional model';
 
 CREATE SCHEMA IF NOT EXISTS `finops_dev`.`datamart`
 COMMENT 'Certified analytical tables';
-

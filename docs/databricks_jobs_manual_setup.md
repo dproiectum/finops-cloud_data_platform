@@ -18,7 +18,7 @@ Dans les paramètres du Job, créer :
 |---|---|
 | `environment` | `dev` |
 | `start_month` | `2025-01` |
-| `end_month` | `2025-12` |
+| `end_month` | `2026-06` |
 
 Les paramètres de Job sont automatiquement transmis aux tâches Notebook qui
 utilisent les widgets portant les mêmes noms. Il n’est donc pas nécessaire de
@@ -27,19 +27,18 @@ valeurs comme **pushed down**.
 
 Configurer **Maximum concurrent runs** à `1`. Ne pas ajouter de schedule pour
 le premier test. Ce Job est strictement un Job DEV : ne pas remplacer
-`environment` par `prod`, car la tâche SQL finale contrôle volontairement que
-PROD reste vide.
+`environment` par `prod`, car le contrôle final vérifie volontairement que PROD
+reste vide.
 
 Avant de créer les tâches, conserver le même scénario que pendant la
-reconstruction : compute Serverless avec `platform_setup_serverless`, ou compute
-Classic belge avec `platform_setup_classic_be`.
+reconstruction : `platform/serverless` ou `platform/classic_compute`.
 
 ## 2. Tâche `check_environment`
 
 - Task name : `check_environment`
 - Type : `Notebook`
 - Source : `Workspace`
-- Notebook : `notebooks/operations/environment_check.ipynb` dans le Git Folder
+- Notebook : `platform/common/notebooks/operations/environment_check.ipynb` dans le Git Folder
 - Compute : celui du scénario retenu
 - Depends on : aucun
 
@@ -50,7 +49,7 @@ Enregistrer la tâche.
 - Task name : `load_billing_range`
 - Type : `Notebook`
 - Source : `Workspace`
-- Notebook : `notebooks/pipelines/03_billing_backfill.ipynb`
+- Notebook : `platform/common/notebooks/pipelines/03_billing_backfill.ipynb`
 - Compute : celui du scénario retenu
 - Depends on : `check_environment`
 - Run if dependencies : `All succeeded`
@@ -60,20 +59,41 @@ du Job par transmission automatique.
 
 ## 4. Tâche `validate_loaded_data`
 
+### Scénario Serverless
+
 - Task name : `validate_loaded_data`
 - Type : `SQL`
 - SQL task : `File`
 - Source : `Workspace`
-- File Serverless : `sql/platform_setup_serverless/06_validate_loaded_dev.sql`
-- File Classic Belgique : `sql/platform_setup_classic_be/07_validate_loaded_dev.sql`
-- SQL Warehouse : sélectionner le Warehouse utilisé pendant la reconstruction
+- File : `platform/common/sql/controls/02_validate_loaded_dev.sql`
+- SQL Warehouse : le Warehouse Serverless ou Pro retenu
 - Depends on : `load_billing_range`
 - Run if dependencies : `All succeeded`
 
-Un SQL task de type **File** accepte plusieurs instructions séparées par des
-points-virgules. Les dernières instructions du fichier sont des assertions :
-la tâche devient rouge si les couches ne se réconcilient pas, si des doublons
-sont détectés ou si PROD n’est plus vide. Enregistrer la tâche.
+### Scénario Classic Belgique
+
+Ne pas utiliser de SQL task avec un SQL Warehouse Classic dans ce Job. Databricks
+limite alors le Job à une seule tâche, même si les deux autres tâches utilisent
+un All-Purpose Classic compute.
+
+- Task name : `validate_loaded_data`
+- Type : `Notebook`
+- Source : `Workspace`
+- Notebook : `platform/classic_compute/notebooks/validate_loaded_environment_classic.ipynb`
+- Compute : le même All-Purpose Classic que les deux premières tâches
+- Depends on : `load_billing_range`
+- Run if dependencies : `All succeeded`
+
+Le notebook choisit `platform/common/sql/controls/02_validate_loaded_dev.sql`
+grâce au paramètre Job `environment=dev`, exécute chaque instruction avec Spark et force son
+évaluation. Les dernières instructions sont des assertions : la tâche devient
+rouge si les couches ne se réconcilient pas, si des doublons sont détectés ou
+si PROD n’est plus vide.
+
+Les modèles YAML prêts à copier sont enregistrés dans :
+
+- `platform/serverless/jobs/billing_full_load_by_month.yml`;
+- `platform/classic_compute/jobs/billing_full_load_by_month.yml`.
 
 ## 5. Vérifier et capturer le graphe
 
@@ -88,7 +108,7 @@ Avant l’exécution, capturer :
 1. le graphe complet avec les trois tâches;
 2. les paramètres du Job;
 3. les dépendances de chaque tâche;
-4. le compute du scénario et le SQL Warehouse sélectionné.
+4. le compute du scénario et, uniquement en Serverless, le SQL Warehouse.
 
 ## 6. Tester le Job
 

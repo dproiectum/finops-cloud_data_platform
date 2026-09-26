@@ -1,9 +1,8 @@
--- STEP 05 - Recreate OPS before any validation or pipeline execution.
+-- SERVERLESS STEP 04 - Recreate OPS before any validation or pipeline execution.
 -- One operations catalog records DEV and PROD independently through the
 -- environment column.
 
 CREATE CATALOG IF NOT EXISTS `finops_ops`
-MANAGED LOCATION 'gs://dtl_finops-unitycatalog-euw1/catalogs/finops_ops'
 COMMENT 'Operational monitoring and reconciliation for FinOps pipelines';
 
 CREATE SCHEMA IF NOT EXISTS `finops_ops`.`audit`
@@ -80,4 +79,3 @@ CREATE TABLE IF NOT EXISTS `finops_ops`.`audit`.`file_archive` (
   archived_at TIMESTAMP,
   error_message STRING
 ) USING DELTA;
-

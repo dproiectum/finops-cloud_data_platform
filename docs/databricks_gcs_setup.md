@@ -9,11 +9,12 @@ This setup is manual and requires Unity Catalog administration privileges.
    `gs://dtl_finops-unitycatalog-euw1`, a dedicated Storage Credential, and an
    External Location that covers this bucket. Grant `CREATE MANAGED STORAGE`
    on that External Location to the platform administrator.
-4. Choose exactly one complete setup workflow:
-   `sql/platform_setup_serverless` for Default Storage, or
-   `sql/platform_setup_classic_be` for the Belgian Classic workspace.
-5. Run its scripts in numeric order as explained in
-   `manual_platform_rebuild.md`. Do not mix creation scripts between scenarios.
+4. Choose exactly one catalog-creation scenario:
+   `platform/serverless` for Default Storage, or
+   `platform/classic_compute` for the Belgian Classic workspace.
+5. Run its creation scripts and the shared controls under `platform/common` in
+   the order explained in `manual_platform_rebuild.md`. Do not mix creation
+   scripts between scenarios.
 6. Grant the pipeline identity `USE CATALOG`, `USE SCHEMA`, `READ VOLUME`, and
    the table creation/write permissions required in the selected environment.
 

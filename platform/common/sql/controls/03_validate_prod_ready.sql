@@ -1,4 +1,4 @@
--- STEP 07 - Read-only preflight before the first PROD load.
+-- COMMON CONTROL 03 - Read-only preflight before the first PROD load.
 -- Run this file once, while PROD is still empty. It must fail after PROD is loaded.
 
 -- Expected table counts: Bronze=2, Silver=2, Gold=12, Datamart=14.
@@ -102,4 +102,3 @@ SELECT assert_true(
 );
 
 DROP VIEW prod_preload_row_counts;
-

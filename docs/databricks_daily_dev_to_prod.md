@@ -5,16 +5,16 @@ supprime aucune donnée et ne remplace pas le processus de clôture mensuelle.
 
 ## 1. Tester chaque étape manuellement
 
-Après Pull du Git Folder, utiliser Serverless et exécuter dans cet ordre avec
-le même `source_uri` :
+Après Pull du Git Folder, utiliser le compute du scénario retenu — Serverless
+ou All-Purpose Classic — et exécuter dans cet ordre avec le même `source_uri` :
 
-1. `notebooks/operations/environment_check.ipynb`, `environment=dev`;
-2. `notebooks/operations/discover_daily_files.ipynb`, `environment=dev`;
-3. `notebooks/pipelines/01_daily_incremental.ipynb`, `environment=dev`;
-4. `notebooks/operations/validate_daily_load.ipynb`, `environment=dev`;
-5. `notebooks/operations/environment_check.ipynb`, `environment=prod`;
-6. `notebooks/pipelines/01_daily_incremental.ipynb`, `environment=prod`;
-7. `notebooks/operations/validate_daily_load.ipynb`, `environment=prod`.
+1. `platform/common/notebooks/operations/environment_check.ipynb`, `environment=dev`;
+2. `platform/common/notebooks/operations/discover_daily_files.ipynb`, `environment=dev`;
+3. `platform/common/notebooks/pipelines/01_daily_incremental.ipynb`, `environment=dev`;
+4. `platform/common/notebooks/operations/validate_daily_load.ipynb`, `environment=dev`;
+5. `platform/common/notebooks/operations/environment_check.ipynb`, `environment=prod`;
+6. `platform/common/notebooks/pipelines/01_daily_incremental.ipynb`, `environment=prod`;
+7. `platform/common/notebooks/operations/validate_daily_load.ipynb`, `environment=prod`.
 
 Exemple de fichier d'un mois ouvert :
 
@@ -67,8 +67,8 @@ validate_daily_prod
 ### `discover_daily_files`
 
 - Type : Notebook
-- Notebook : `notebooks/operations/discover_daily_files.ipynb`
-- Compute : Serverless
+- Notebook : `platform/common/notebooks/operations/discover_daily_files.ipynb`
+- Compute : celui du scénario retenu
 - aucun paramètre de tâche : les paramètres de Job homonymes sont pushed down.
 
 ### `new_file_gate`
@@ -80,13 +80,13 @@ validate_daily_prod
 
 ### `check_environment_dev`
 
-- Notebook : `notebooks/operations/environment_check.ipynb`
+- Notebook : `platform/common/notebooks/operations/environment_check.ipynb`
 - dépendance : `new_file_gate (true)`
 - paramètre `environment=dev`.
 
 ### `load_daily_dev`
 
-- Notebook : `notebooks/pipelines/01_daily_incremental.ipynb`
+- Notebook : `platform/common/notebooks/pipelines/01_daily_incremental.ipynb`
 - dépendance : `check_environment_dev`
 - paramètres :
 
@@ -97,7 +97,7 @@ source_uri = {{tasks.discover_daily_files.values.source_uri}}
 
 ### `validate_daily_dev`
 
-- Notebook : `notebooks/operations/validate_daily_load.ipynb`
+- Notebook : `platform/common/notebooks/operations/validate_daily_load.ipynb`
 - dépendance : `load_daily_dev`
 - mêmes paramètres que `load_daily_dev`.
 

@@ -1,7 +1,6 @@
--- STEP 04 - Recreate PROD structures only. Do not load PROD during the DEV rebuild.
+-- SERVERLESS STEP 03 - Recreate PROD structures only. Do not load PROD during the DEV rebuild.
 
 CREATE CATALOG IF NOT EXISTS `finops_prod`
-MANAGED LOCATION 'gs://dtl_finops-unitycatalog-euw1/catalogs/finops_prod'
 COMMENT 'PROD business data for the FinOps platform';
 
 CREATE SCHEMA IF NOT EXISTS `finops_prod`.`bronze`
@@ -15,4 +14,3 @@ COMMENT 'FinOps dimensional model';
 
 CREATE SCHEMA IF NOT EXISTS `finops_prod`.`datamart`
 COMMENT 'Certified analytical tables';
-

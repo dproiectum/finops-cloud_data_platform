@@ -1,0 +1,36 @@
+resources:
+  jobs:
+    finops_dev_billing_orchestration_full_load_by_month:
+      name: finops-dev-billing_orchestration-full_load-by_month
+      tasks:
+        - task_key: check_environment
+          notebook_task:
+            notebook_path: /Workspace/Users/thailongdam@gmail.com/finops-cloud_data_platform/platform/common/notebooks/operations/environment_check
+            source: WORKSPACE
+
+        - task_key: load_billing_range
+          depends_on:
+            - task_key: check_environment
+          notebook_task:
+            notebook_path: /Workspace/Users/thailongdam@gmail.com/finops-cloud_data_platform/platform/common/notebooks/pipelines/03_billing_backfill
+            source: WORKSPACE
+
+        - task_key: validate_loaded_data
+          depends_on:
+            - task_key: load_billing_range
+          sql_task:
+            file:
+              path: /Workspace/Users/thailongdam@gmail.com/finops-cloud_data_platform/platform/common/sql/controls/02_validate_loaded_dev.sql
+              source: WORKSPACE
+            warehouse_id: 81cb90d52797f414
+
+      queue:
+        enabled: true
+      parameters:
+        - name: environment
+          default: dev
+        - name: start_month
+          default: 2025-01
+        - name: end_month
+          default: 2026-06
+      performance_target: PERFORMANCE_OPTIMIZED
