@@ -77,8 +77,82 @@ def render_sql(relative_path: str, values: Mapping[str, str]) -> str:
 
 
 def split_statements(script: str) -> list[str]:
-    """Split project SQL files, which deliberately contain no semicolons in strings."""
-    return [statement.strip() for statement in script.split(";") if statement.strip()]
+    """Split SQL without treating semicolons in comments or quoted text as separators."""
+    statements: list[str] = []
+    buffer: list[str] = []
+    state = "sql"
+    has_executable_sql = False
+    position = 0
+
+    while position < len(script):
+        character = script[position]
+        following = script[position + 1] if position + 1 < len(script) else ""
+
+        if state == "sql":
+            if character == "-" and following == "-":
+                buffer.extend((character, following))
+                state = "line_comment"
+                position += 2
+                continue
+            if character == "/" and following == "*":
+                buffer.extend((character, following))
+                state = "block_comment"
+                position += 2
+                continue
+            if character in {"'", '"', "`"}:
+                buffer.append(character)
+                state = {"'": "single_quote", '"': "double_quote", "`": "backtick"}[
+                    character
+                ]
+                has_executable_sql = True
+                position += 1
+                continue
+            if character == ";":
+                if has_executable_sql:
+                    statements.append("".join(buffer).strip())
+                buffer = []
+                has_executable_sql = False
+                position += 1
+                continue
+            buffer.append(character)
+            if not character.isspace():
+                has_executable_sql = True
+            position += 1
+            continue
+
+        buffer.append(character)
+
+        if state == "line_comment":
+            if character == "\n":
+                state = "sql"
+            position += 1
+            continue
+
+        if state == "block_comment":
+            if character == "*" and following == "/":
+                buffer.append(following)
+                state = "sql"
+                position += 2
+            else:
+                position += 1
+            continue
+
+        quote = {"single_quote": "'", "double_quote": '"', "backtick": "`"}[state]
+        if character == "\\" and following:
+            buffer.append(following)
+            position += 2
+            continue
+        if character == quote:
+            if following == quote:
+                buffer.append(following)
+                position += 2
+                continue
+            state = "sql"
+        position += 1
+
+    if has_executable_sql:
+        statements.append("".join(buffer).strip())
+    return statements
 
 
 def execute_sql_file(spark, relative_path: str, values: Mapping[str, str]) -> int:

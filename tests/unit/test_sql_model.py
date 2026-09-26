@@ -15,6 +15,7 @@ from finops_cloud.medallion.gold import (  # noqa: E402
 from finops_cloud.sql.runner import (  # noqa: E402
     placeholders,
     render_sql,
+    split_statements,
     sql_text,
     table_context,
 )
@@ -186,6 +187,30 @@ class SqlModelTests(unittest.TestCase):
         validation = sql_text("controls/02_validate_loaded_dev.sql")
         self.assertGreaterEqual(validation.count("assert_true("), 7)
         self.assertIn("CONTROL FAILED: PROD is no longer empty", validation)
+
+    def test_sql_splitter_ignores_semicolons_in_comments_and_quoted_text(self):
+        script = """-- Historical failures are preserved; only latest runs matter.
+        SELECT 'semi;colon' AS value;
+        /* A block; comment. */
+        SELECT "double;quote", `backtick;name` FROM some_table;
+        -- A trailing comment; is not an executable statement.
+        """
+        statements = split_statements(script)
+        self.assertEqual(len(statements), 2)
+        self.assertIn("Historical failures are preserved; only latest", statements[0])
+        self.assertIn("'semi;colon'", statements[0])
+        self.assertIn("/* A block; comment. */", statements[1])
+        self.assertIn("`backtick;name`", statements[1])
+
+    def test_dev_loaded_validation_splits_into_complete_statements(self):
+        statements = split_statements(sql_text("controls/02_validate_loaded_dev.sql"))
+        self.assertEqual(len(statements), 22)
+        self.assertTrue(
+            any(
+                "Historical failures are preserved; only the latest" in statement
+                for statement in statements
+            )
+        )
 
     def test_prod_preflight_is_empty_and_environment_scoped(self):
         preflight = sql_text("controls/03_validate_prod_ready.sql")
