@@ -1,0 +1,33 @@
+resources:
+  jobs:
+    finops_prod_billing_promotion_with_photon:
+      name: finops-prod-billing-promotion-with_photon
+      tasks:
+        - task_key: check_environment_prod
+          notebook_task:
+            notebook_path: /Workspace/Users/thailongdam@gmail.com/finops-cloud_data_platform/platform/common/notebooks/operations/environment_check
+            source: WORKSPACE
+          existing_cluster_id: 5925-212130-elwuj3uu
+        - task_key: load_billing_range_prod
+          depends_on:
+            - task_key: check_environment_prod
+          notebook_task:
+            notebook_path: /Workspace/Users/thailongdam@gmail.com/finops-cloud_data_platform/platform/common/notebooks/pipelines/03_billing_backfill
+            source: WORKSPACE
+          existing_cluster_id: 5925-212130-elwuj3uu
+        - task_key: validate_loaded_prod
+          depends_on:
+            - task_key: load_billing_range_prod
+          notebook_task:
+            notebook_path: /Workspace/Users/thailongdam@gmail.com/finops-cloud_data_platform/platform/classic_compute/notebooks/validate_loaded_environment_classic
+            source: WORKSPACE
+          existing_cluster_id: 5925-212130-elwuj3uu
+      queue:
+        enabled: true
+      parameters:
+        - name: environment
+          default: prod
+        - name: start_month
+          default: 2025-01
+        - name: end_month
+          default: 2026-06

@@ -133,6 +133,27 @@ class NotebookTests(unittest.TestCase):
             for relative_path in sql_paths:
                 self.assertTrue((ROOT / relative_path).is_file(), relative_path)
 
+    def test_classic_prod_promotion_job_is_isolated_and_uses_prod_controls(self):
+        prod = (
+            ROOT / "platform/classic_compute/jobs/billing_prod_promotion.yml"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("name: finops-prod-billing-promotion", prod)
+        self.assertIn("max_concurrent_runs: 1", prod)
+        self.assertIn("task_key: check_environment_prod", prod)
+        self.assertIn("task_key: load_billing_range_prod", prod)
+        self.assertIn("task_key: validate_loaded_prod", prod)
+        self.assertIn("default: prod", prod)
+        self.assertEqual(prod.count("existing_cluster_id: 5925-212130-elwuj3uu"), 3)
+        self.assertIn("validate_loaded_environment_classic", prod)
+        self.assertNotIn("sql_task:", prod)
+
+        notebook_paths = re.findall(
+            r"notebook_path: .*/finops-cloud_data_platform/(.+)", prod
+        )
+        for relative_path in notebook_paths:
+            self.assertTrue((ROOT / f"{relative_path}.ipynb").is_file(), relative_path)
+
     def test_python_script_entry_points_call_maintained_modules(self):
         expected = {
             "run_daily_incremental.py": "finops_cloud.pipelines.daily_incremental import main",

@@ -32,5 +32,6 @@ For a multi-task Job, use
 Classic cluster as the loading tasks. It executes the common blocking controls
 with Spark because a Job that uses a Classic SQL Warehouse is limited to one
 task. `jobs/billing_full_load_by_month.yml` contains the corresponding manual
-Job template. Its `existing_cluster_id` belongs to the current Belgian
+Job template. `jobs/billing_prod_promotion.yml` is the separate three-task PROD
+promotion template. Their `existing_cluster_id` belongs to the current Belgian
 workspace and must be updated if the All-Purpose cluster is recreated.

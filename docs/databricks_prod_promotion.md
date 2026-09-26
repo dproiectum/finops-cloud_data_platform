@@ -73,6 +73,15 @@ Ne pas modifier ni cloner par-dessus le Job DEV. Ajouter les paramètres :
 
 Configurer `Maximum concurrent runs = 1` et ne pas ajouter de schedule.
 
+Pour le scénario Classic Belgique, le modèle YAML prêt à importer est :
+
+```text
+platform/classic_compute/jobs/billing_prod_promotion.yml
+```
+
+Le modèle crée un Job PROD séparé, utilise le cluster All-Purpose belge pour
+les trois tâches et ne contient aucun déclencheur planifié.
+
 Créer le DAG suivant :
 
 ```text
