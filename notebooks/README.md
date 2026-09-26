@@ -27,5 +27,6 @@ Automatic archival has no active notebook or Job because RAW is consumed by
 both DEV and PROD.
 
 Catalog creation, the four-catalog reset, and validations are deliberately kept
-as visible, ordered SQL scripts under `sql/platform_setup`. Run them manually
-in a SQL Warehouse by following `docs/manual_platform_rebuild.md`.
+as visible, ordered SQL scripts under either `sql/platform_setup_serverless`
+or `sql/platform_setup_classic_be`. Select one scenario for the workspace and
+run it manually by following `docs/manual_platform_rebuild.md`.

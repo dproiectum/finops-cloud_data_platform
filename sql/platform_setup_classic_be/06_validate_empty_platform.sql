@@ -1,4 +1,4 @@
--- STEP 05 - Read-only checks after both environments were initialized.
+-- STEP 06 - Read-only checks after both environments were initialized.
 -- Expected table counts: Bronze=2, Silver=2, Gold=12, Datamart=14 per catalog.
 
 SELECT 'finops_dev' AS table_catalog, table_schema, count(*) AS table_count

@@ -22,7 +22,8 @@ config/                         Environment and common RAW/OPS configuration
 contracts/                      Versioned FOCUS Data Contract
 notebooks/pipelines/            Manual pipeline entry points
 notebooks/operations/           Environment and prerequisite checks
-sql/platform_setup/             Ordered manual rebuild and validation scripts
+sql/platform_setup_serverless/  Complete Serverless rebuild and validation workflow
+sql/platform_setup_classic_be/  Complete Belgian Classic-compute workflow
 sql/gold/                       Gold DDL and loading SQL
 sql/datamarts/                  Certified datamart SQL
 src/finops_cloud/audit/         Runs, snapshots, and reconciliation

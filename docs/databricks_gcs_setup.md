@@ -5,10 +5,16 @@ This setup is manual and requires Unity Catalog administration privileges.
 1. Confirm that the `dtl_finops` bucket and the `finops_gcs_storage_dev`
    Storage Credential exist.
 2. Grant the Storage Credential access to `gs://dtl_finops`.
-3. Open a Databricks SQL Warehouse.
-4. Follow the ordered scripts in `sql/platform_setup` as explained in
-   `manual_platform_rebuild.md`.
-5. Grant the pipeline identity `USE CATALOG`, `USE SCHEMA`, `READ VOLUME`, and
+3. For a classic workspace, create the regional managed-data bucket
+   `gs://dtl_finops-unitycatalog-euw1`, a dedicated Storage Credential, and an
+   External Location that covers this bucket. Grant `CREATE MANAGED STORAGE`
+   on that External Location to the platform administrator.
+4. Choose exactly one complete setup workflow:
+   `sql/platform_setup_serverless` for Default Storage, or
+   `sql/platform_setup_classic_be` for the Belgian Classic workspace.
+5. Run its scripts in numeric order as explained in
+   `manual_platform_rebuild.md`. Do not mix creation scripts between scenarios.
+6. Grant the pipeline identity `USE CATALOG`, `USE SCHEMA`, `READ VOLUME`, and
    the table creation/write permissions required in the selected environment.
 
 The registered source path is

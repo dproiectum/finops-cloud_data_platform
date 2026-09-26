@@ -32,8 +32,8 @@ Parquet RAW que DEV sans les déplacer.
 
 ## 3. Contrôler l'environnement PROD
 
-Ouvrir `notebooks/operations/environment_check.ipynb`, sélectionner Serverless,
-puis exécuter avec :
+Ouvrir `notebooks/operations/environment_check.ipynb`, sélectionner le compute
+du scénario retenu, puis exécuter avec :
 
 ```text
 environment = prod
@@ -42,8 +42,12 @@ environment = prod
 Le notebook doit afficher `finops_prod`, les quatre schémas, le Volume RAW, les
 tables OPS et la liste des fichiers mensuels.
 
-Exécuter ensuite `sql/platform_setup/07_validate_prod_ready.sql` dans le SQL
-Warehouse. Résultats attendus :
+Exécuter ensuite le contrôle correspondant au scénario :
+
+- Serverless : `sql/platform_setup_serverless/07_validate_prod_ready.sql`;
+- Classic Belgique : `sql/platform_setup_classic_be/08_validate_prod_ready.sql`.
+
+Résultats attendus :
 
 - 2 tables Bronze, 2 Silver, 12 Gold et 14 datamarts;
 - 30 tables PROD avec `row_count = 0`;
@@ -82,7 +86,7 @@ check_environment_prod → load_billing_range_prod → validate_loaded_prod
 - Type : `Notebook`
 - Source : `Workspace`
 - Notebook : `notebooks/operations/environment_check.ipynb`
-- Compute : `Serverless`
+- Compute : celui du scénario retenu
 - Depends on : aucun
 
 ### Tâche `load_billing_range_prod`
@@ -90,7 +94,7 @@ check_environment_prod → load_billing_range_prod → validate_loaded_prod
 - Type : `Notebook`
 - Source : `Workspace`
 - Notebook : `notebooks/pipelines/03_billing_backfill.ipynb`
-- Compute : `Serverless`
+- Compute : celui du scénario retenu
 - Depends on : `check_environment_prod`
 - Run if dependencies : `All succeeded`
 
@@ -103,7 +107,8 @@ manuellement une valeur `{{job.parameters...}}`.
 - Type : `SQL`
 - SQL task : `File`
 - Source : `Workspace`
-- File : `sql/platform_setup/08_validate_loaded_prod.sql`
+- File Serverless : `sql/platform_setup_serverless/08_validate_loaded_prod.sql`
+- File Classic Belgique : `sql/platform_setup_classic_be/09_validate_loaded_prod.sql`
 - SQL Warehouse : le Warehouse de validation
 - Depends on : `load_billing_range_prod`
 - Run if dependencies : `All succeeded`
@@ -149,21 +154,23 @@ couches suivantes remplacent proprement le mois. Résultats complets attendus :
 
 ## 7. Valider l'indépendance DEV/PROD
 
-Le contrôle `08_validate_loaded_prod.sql` affiche les nombres de runs par
-environnement dans OPS. Vérifier que DEV et PROD sont présents séparément.
+Le contrôle `validate_loaded_prod.sql` du scénario choisi affiche les nombres
+de runs par environnement dans OPS. Vérifier que DEV et PROD sont présents
+séparément.
 
-Rejouer `sql/platform_setup/06_validate_loaded_dev.sql` n'est plus approprié
+Rejouer `platform_setup_serverless/06_validate_loaded_dev.sql` ou
+`platform_setup_classic_be/07_validate_loaded_dev.sql` n'est plus approprié
 après le chargement PROD, car sa dernière assertion exige volontairement que
 PROD soit vide. Les contrôles métier DEV restent consultables dans ses premiers
 résultats, mais le contrôle bloquant officiel de PROD est désormais le fichier
-`08_validate_loaded_prod.sql`.
+`validate_loaded_prod.sql` du scénario choisi.
 
 ## 8. Passage en exploitation
 
 Conserver le Job de promotion sans schedule pour les backfills. Pour un nouveau
 mois, utiliser `notebooks/pipelines/02_monthly_close.ipynb` avec
-`environment=prod` et `month=YYYY-MM`, suivi de
-`08_validate_loaded_prod.sql`.
+`environment=prod` et `month=YYYY-MM`, suivi du contrôle
+`validate_loaded_prod.sql` du scénario choisi.
 
 Ne planifier ce futur Job mensuel qu'après avoir défini comment le mois à fermer
 est fourni et comment l'arrivée du Parquet est contrôlée. Garder

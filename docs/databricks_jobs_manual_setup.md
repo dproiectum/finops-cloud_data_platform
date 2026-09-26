@@ -30,13 +30,17 @@ le premier test. Ce Job est strictement un Job DEV : ne pas remplacer
 `environment` par `prod`, car la tâche SQL finale contrôle volontairement que
 PROD reste vide.
 
+Avant de créer les tâches, conserver le même scénario que pendant la
+reconstruction : compute Serverless avec `platform_setup_serverless`, ou compute
+Classic belge avec `platform_setup_classic_be`.
+
 ## 2. Tâche `check_environment`
 
 - Task name : `check_environment`
 - Type : `Notebook`
 - Source : `Workspace`
 - Notebook : `notebooks/operations/environment_check.ipynb` dans le Git Folder
-- Compute : `Serverless`
+- Compute : celui du scénario retenu
 - Depends on : aucun
 
 Enregistrer la tâche.
@@ -47,7 +51,7 @@ Enregistrer la tâche.
 - Type : `Notebook`
 - Source : `Workspace`
 - Notebook : `notebooks/pipelines/03_billing_backfill.ipynb`
-- Compute : `Serverless`
+- Compute : celui du scénario retenu
 - Depends on : `check_environment`
 - Run if dependencies : `All succeeded`
 
@@ -60,7 +64,8 @@ du Job par transmission automatique.
 - Type : `SQL`
 - SQL task : `File`
 - Source : `Workspace`
-- File : `sql/platform_setup/06_validate_loaded_dev.sql` dans le Git Folder
+- File Serverless : `sql/platform_setup_serverless/06_validate_loaded_dev.sql`
+- File Classic Belgique : `sql/platform_setup_classic_be/07_validate_loaded_dev.sql`
 - SQL Warehouse : sélectionner le Warehouse utilisé pendant la reconstruction
 - Depends on : `load_billing_range`
 - Run if dependencies : `All succeeded`
@@ -83,7 +88,7 @@ Avant l’exécution, capturer :
 1. le graphe complet avec les trois tâches;
 2. les paramètres du Job;
 3. les dépendances de chaque tâche;
-4. le compute Serverless et le SQL Warehouse sélectionné.
+4. le compute du scénario et le SQL Warehouse sélectionné.
 
 ## 6. Tester le Job
 

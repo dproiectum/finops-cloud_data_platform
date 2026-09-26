@@ -14,3 +14,4 @@ COMMENT 'FinOps dimensional model';
 
 CREATE SCHEMA IF NOT EXISTS `finops_dev`.`datamart`
 COMMENT 'Certified analytical tables';
+

@@ -102,3 +102,4 @@ SELECT assert_true(
 );
 
 DROP VIEW prod_preload_row_counts;
+

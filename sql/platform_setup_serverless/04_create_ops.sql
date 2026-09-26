@@ -79,3 +79,4 @@ CREATE TABLE IF NOT EXISTS `finops_ops`.`audit`.`file_archive` (
   archived_at TIMESTAMP,
   error_message STRING
 ) USING DELTA;
+

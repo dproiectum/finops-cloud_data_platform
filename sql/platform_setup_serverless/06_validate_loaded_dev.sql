@@ -280,3 +280,4 @@ SELECT assert_true(
        WHERE environment = 'prod') = 0,
   'CONTROL FAILED: PROD is no longer empty'
 );
+

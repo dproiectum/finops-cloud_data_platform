@@ -4,6 +4,16 @@ Cette procédure suit le plan validé en huit phases. Aucun script n’est exéc
 automatiquement par le dépôt. Toutes les commandes destructives restent sous le
 contrôle de l’ingénieur dans Databricks SQL.
 
+Choisir un seul scénario pour tout le workspace :
+
+- `sql/platform_setup_serverless` pour Serverless avec Default Storage;
+- `sql/platform_setup_classic_be` pour le compute Classic belge avec le bucket
+  géré `gs://dtl_finops-unitycatalog-euw1`.
+
+Les deux dossiers contiennent le workflow complet. Ne pas mélanger leurs scripts
+de création. Dans les étapes ci-dessous, utiliser la colonne correspondant au
+scénario choisi.
+
 ## Phase 1 — Architecture cible
 
 La plateforme contient quatre catalogues et dix schémas métier :
@@ -26,7 +36,11 @@ Avant toute suppression :
 3. confirmer dans GCS que `gs://dtl_finops/focus/monthly` contient les fichiers
    `billing-YYYY-MM.parquet`;
 4. vérifier que le Storage Credential `finops_gcs_storage_dev` et l’External
-   Location `finops_gcs` sont disponibles.
+   Location `finops_gcs` sont disponibles;
+5. pour Classic Belgique, exécuter d’abord
+   `sql/platform_setup_classic_be/00_validate_managed_storage.sql` et valider
+   le credential `finops_uc_storage_be`, l’External Location
+   `finops_uc_managed_be` et le bucket géré régional.
 
 Un Volume externe est un enregistrement Unity Catalog au-dessus d’un chemin
 GCS. Supprimer `finops_raw` retire cet enregistrement mais ne supprime pas les
@@ -35,9 +49,16 @@ supprimées avec leurs catalogues.
 
 ## Phase 3 — Suppression des quatre catalogues
 
-Ouvrir `sql/platform_setup/00_drop_all_project_catalogs.sql` dans un SQL
-Warehouse. Lire puis exécuter les quatre instructions `DROP CATALOG ... CASCADE`
-une par une.
+Ouvrir le script de suppression du scénario choisi :
+
+- Serverless :
+  `sql/platform_setup_serverless/00_drop_all_project_catalogs.sql`;
+- Classic Belgique :
+  `sql/platform_setup_classic_be/01_drop_all_project_catalogs.sql`.
+
+Lire puis exécuter les quatre instructions `DROP CATALOG ... CASCADE` une par
+une. Dans le workspace Classic, utiliser un notebook SQL attaché au compute All
+Purpose Classic si le SQL Editor ne permet pas d’attacher le compute voulu.
 
 Le script supprime uniquement :
 
@@ -55,12 +76,23 @@ présents dans GCS.
 
 ### 4.1 Recréer les catalogues et les schémas
 
-Exécuter dans un SQL Warehouse, instruction par instruction et dans cet ordre :
+Exécuter les scripts de création du même scénario, instruction par instruction
+et dans cet ordre :
 
-1. `sql/platform_setup/01_create_raw.sql`;
-2. `sql/platform_setup/02_create_dev.sql`;
-3. `sql/platform_setup/03_create_prod.sql`;
-4. `sql/platform_setup/04_create_ops.sql`.
+| Objet | Serverless | Classic Belgique |
+|---|---|---|
+| RAW | `platform_setup_serverless/01_create_raw.sql` | `platform_setup_classic_be/02_create_raw.sql` |
+| DEV | `platform_setup_serverless/02_create_dev.sql` | `platform_setup_classic_be/03_create_dev.sql` |
+| PROD | `platform_setup_serverless/03_create_prod.sql` | `platform_setup_classic_be/04_create_prod.sql` |
+| OPS | `platform_setup_serverless/04_create_ops.sql` | `platform_setup_classic_be/05_create_ops.sql` |
+
+Dans le workspace classique belge, le métastore n'a pas d'emplacement géré par
+défaut. Chaque catalogue utilise donc un sous-chemin dédié du bucket régional
+`gs://dtl_finops-unitycatalog-euw1/catalogs/<nom_du_catalogue>`. Unity Catalog y
+crée ses propres chemins `__unitystorage` pour les tables gérées. Le bucket
+source `gs://dtl_finops` reste réservé aux Parquet externes `focus` et
+`focus_archive`. Si un catalogue existe déjà, `CREATE CATALOG IF NOT EXISTS` ne
+modifie pas son emplacement actuel.
 
 À ce stade, RAW contient les deux Volumes externes, DEV et PROD contiennent
 leurs quatre schémas, et OPS contient cinq tables vides.
@@ -68,9 +100,9 @@ leurs quatre schémas, et OPS contient cinq tables vides.
 ### 4.2 Vérifier l’infrastructure
 
 Ouvrir `notebooks/operations/environment_check.ipynb`, définir
-`ENVIRONMENT = "dev"`, attacher du compute Serverless et exécuter toutes les
-cellules. Refaire le contrôle avec `ENVIRONMENT = "prod"`. Ce notebook ne crée
-et ne charge aucun objet.
+`ENVIRONMENT = "dev"`, attacher le compute correspondant au scénario et
+exécuter toutes les cellules. Refaire le contrôle avec `ENVIRONMENT = "prod"`.
+Ce notebook ne crée et ne charge aucun objet.
 
 ### 4.3 Créer les tables métier vides
 
@@ -94,7 +126,13 @@ déjà une ligne.
 
 ### 4.4 Prouver que la plateforme est vide
 
-Exécuter `sql/platform_setup/05_validate_empty_platform.sql`. Résultats attendus :
+Exécuter le contrôle du scénario choisi :
+
+- Serverless : `sql/platform_setup_serverless/05_validate_empty_platform.sql`;
+- Classic Belgique :
+  `sql/platform_setup_classic_be/06_validate_empty_platform.sql`.
+
+Résultats attendus :
 
 - 2, 2, 12 et 14 tables par couche dans chacun des catalogues DEV et PROD;
 - 60 tables métier listées avec `row_count = 0`;
@@ -135,7 +173,10 @@ Après la réussite du chargement manuel et de la phase 6, suivre
 
 ## Phase 6 — Contrôles
 
-Exécuter `sql/platform_setup/06_validate_loaded_dev.sql` dans un SQL Warehouse.
+Exécuter le contrôle chargé DEV du scénario choisi :
+
+- Serverless : `sql/platform_setup_serverless/06_validate_loaded_dev.sql`;
+- Classic Belgique : `sql/platform_setup_classic_be/07_validate_loaded_dev.sql`.
 
 Contrôles structurels :
 
@@ -182,12 +223,14 @@ Après validation du DAG DEV et des captures, suivre la procédure détaillée
 `docs/databricks_prod_promotion.md` :
 
 - préparer les autorisations PROD;
-- exécuter `sql/platform_setup/07_validate_prod_ready.sql` avant le premier
+- exécuter `platform_setup_serverless/07_validate_prod_ready.sql` ou
+  `platform_setup_classic_be/08_validate_prod_ready.sql` avant le premier
   chargement PROD;
 - conserver le Job DEV strictement en `environment=dev`, car son contrôle
   `06_validate_loaded_dev.sql` est volontairement spécifique à DEV;
 - créer un Job PROD séparé et utiliser
-  `sql/platform_setup/08_validate_loaded_prod.sql`;
+  `platform_setup_serverless/08_validate_loaded_prod.sql` ou
+  `platform_setup_classic_be/09_validate_loaded_prod.sql`;
 - effectuer un canari PROD sur un mois avant le backfill complet;
 - conserver RAW commun et l'archivage désactivé;
 - surveiller les runs DEV/PROD dans `finops_ops.audit`;
