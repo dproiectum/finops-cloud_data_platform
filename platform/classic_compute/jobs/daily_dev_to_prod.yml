@@ -1,0 +1,107 @@
+resources:
+  jobs:
+    finops_daily_dev_to_prod:
+      name: finops-daily-dev-to-prod
+      max_concurrent_runs: 1
+      tasks:
+        - task_key: discover_daily_files
+          notebook_task:
+            notebook_path: /Workspace/Users/thailongdam@gmail.com/finops-cloud_data_platform/platform/common/notebooks/operations/discover_daily_files
+            source: WORKSPACE
+            base_parameters:
+              environment: dev
+              processing_date: "{{job.parameters.processing_date}}"
+              source_uri_override: "{{job.parameters.source_uri_override}}"
+          existing_cluster_id: 5925-212130-elwuj3uu
+
+        - task_key: new_file_gate
+          depends_on:
+            - task_key: discover_daily_files
+          condition_task:
+            op: EQUAL_TO
+            left: "{{tasks.discover_daily_files.values.has_new_file}}"
+            right: "true"
+
+        - task_key: check_environment_dev
+          depends_on:
+            - task_key: new_file_gate
+              outcome: "true"
+          notebook_task:
+            notebook_path: /Workspace/Users/thailongdam@gmail.com/finops-cloud_data_platform/platform/common/notebooks/operations/environment_check
+            source: WORKSPACE
+            base_parameters:
+              environment: dev
+          existing_cluster_id: 5925-212130-elwuj3uu
+
+        - task_key: load_daily_dev
+          depends_on:
+            - task_key: check_environment_dev
+          notebook_task:
+            notebook_path: /Workspace/Users/thailongdam@gmail.com/finops-cloud_data_platform/platform/common/notebooks/pipelines/01_daily_incremental
+            source: WORKSPACE
+            base_parameters:
+              environment: dev
+              source_uri: "{{tasks.discover_daily_files.values.source_uri}}"
+          existing_cluster_id: 5925-212130-elwuj3uu
+
+        - task_key: validate_daily_dev
+          depends_on:
+            - task_key: load_daily_dev
+          notebook_task:
+            notebook_path: /Workspace/Users/thailongdam@gmail.com/finops-cloud_data_platform/platform/common/notebooks/operations/validate_daily_load
+            source: WORKSPACE
+            base_parameters:
+              environment: dev
+              source_uri: "{{tasks.discover_daily_files.values.source_uri}}"
+          existing_cluster_id: 5925-212130-elwuj3uu
+
+        - task_key: promotion_gate
+          depends_on:
+            - task_key: validate_daily_dev
+          condition_task:
+            op: EQUAL_TO
+            left: "{{job.parameters.promote_to_prod}}"
+            right: "true"
+
+        - task_key: check_environment_prod
+          depends_on:
+            - task_key: promotion_gate
+              outcome: "true"
+          notebook_task:
+            notebook_path: /Workspace/Users/thailongdam@gmail.com/finops-cloud_data_platform/platform/common/notebooks/operations/environment_check
+            source: WORKSPACE
+            base_parameters:
+              environment: prod
+          existing_cluster_id: 5925-212130-elwuj3uu
+
+        - task_key: load_daily_prod
+          depends_on:
+            - task_key: check_environment_prod
+          notebook_task:
+            notebook_path: /Workspace/Users/thailongdam@gmail.com/finops-cloud_data_platform/platform/common/notebooks/pipelines/01_daily_incremental
+            source: WORKSPACE
+            base_parameters:
+              environment: prod
+              source_uri: "{{tasks.discover_daily_files.values.source_uri}}"
+          existing_cluster_id: 5925-212130-elwuj3uu
+
+        - task_key: validate_daily_prod
+          depends_on:
+            - task_key: load_daily_prod
+          notebook_task:
+            notebook_path: /Workspace/Users/thailongdam@gmail.com/finops-cloud_data_platform/platform/common/notebooks/operations/validate_daily_load
+            source: WORKSPACE
+            base_parameters:
+              environment: prod
+              source_uri: "{{tasks.discover_daily_files.values.source_uri}}"
+          existing_cluster_id: 5925-212130-elwuj3uu
+
+      queue:
+        enabled: true
+      parameters:
+        - name: processing_date
+          default: ""
+        - name: source_uri_override
+          default: ""
+        - name: promote_to_prod
+          default: "false"

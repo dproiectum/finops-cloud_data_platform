@@ -31,7 +31,13 @@ For a multi-task Job, use
 `notebooks/validate_loaded_environment_classic.ipynb` on the same All-Purpose
 Classic cluster as the loading tasks. It executes the common blocking controls
 with Spark because a Job that uses a Classic SQL Warehouse is limited to one
-task. `jobs/billing_full_load_by_month.yml` contains the corresponding manual
-Job template. `jobs/billing_prod_promotion.yml` is the separate three-task PROD
-promotion template. Their `existing_cluster_id` belongs to the current Belgian
-workspace and must be updated if the All-Purpose cluster is recreated.
+task. `jobs/billing-dev-full_load_by_month-no_photon.yml` records the DEV
+benchmark template and `jobs/billing-prod-full_load_by_month-with_photon.yml`
+records the separate PROD benchmark template. Their `existing_cluster_id`
+belongs to the current Belgian workspace and must be updated if the All-Purpose
+cluster is recreated. Photon itself is a cluster setting; the filename only
+documents the configuration used for that benchmark run.
+
+`jobs/daily_dev_to_prod.yml` is the unscheduled Classic daily workflow. It
+discovers one new RAW daily file, validates it in DEV, and keeps PROD promotion
+behind an explicit condition that defaults to `false` for the first test.

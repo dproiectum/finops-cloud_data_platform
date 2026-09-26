@@ -76,7 +76,7 @@ Configurer `Maximum concurrent runs = 1` et ne pas ajouter de schedule.
 Pour le scénario Classic Belgique, le modèle YAML prêt à importer est :
 
 ```text
-platform/classic_compute/jobs/billing_prod_promotion.yml
+platform/classic_compute/jobs/billing-prod-full_load_by_month-with_photon.yml
 ```
 
 Le modèle crée un Job PROD séparé, utilise le cluster All-Purpose belge pour

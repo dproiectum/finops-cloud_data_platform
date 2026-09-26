@@ -113,7 +113,8 @@ class NotebookTests(unittest.TestCase):
             ROOT / "platform/serverless/jobs/billing_full_load_by_month.yml"
         ).read_text(encoding="utf-8")
         classic = (
-            ROOT / "platform/classic_compute/jobs/billing_full_load_by_month.yml"
+            ROOT
+            / "platform/classic_compute/jobs/billing-dev-full_load_by_month-no_photon.yml"
         ).read_text(encoding="utf-8")
 
         self.assertIn("sql_task:", serverless)
@@ -135,10 +136,11 @@ class NotebookTests(unittest.TestCase):
 
     def test_classic_prod_promotion_job_is_isolated_and_uses_prod_controls(self):
         prod = (
-            ROOT / "platform/classic_compute/jobs/billing_prod_promotion.yml"
+            ROOT
+            / "platform/classic_compute/jobs/billing-prod-full_load_by_month-with_photon.yml"
         ).read_text(encoding="utf-8")
 
-        self.assertIn("name: finops-prod-billing-promotion", prod)
+        self.assertIn("name: finops-prod-billing-promotion-with_photon", prod)
         self.assertIn("max_concurrent_runs: 1", prod)
         self.assertIn("task_key: check_environment_prod", prod)
         self.assertIn("task_key: load_billing_range_prod", prod)
@@ -150,6 +152,39 @@ class NotebookTests(unittest.TestCase):
 
         notebook_paths = re.findall(
             r"notebook_path: .*/finops-cloud_data_platform/(.+)", prod
+        )
+        for relative_path in notebook_paths:
+            self.assertTrue((ROOT / f"{relative_path}.ipynb").is_file(), relative_path)
+
+    def test_classic_daily_job_gates_new_files_and_prod_promotion(self):
+        daily = (
+            ROOT / "platform/classic_compute/jobs/daily_dev_to_prod.yml"
+        ).read_text(encoding="utf-8")
+
+        for task_key in (
+            "discover_daily_files",
+            "new_file_gate",
+            "check_environment_dev",
+            "load_daily_dev",
+            "validate_daily_dev",
+            "promotion_gate",
+            "check_environment_prod",
+            "load_daily_prod",
+            "validate_daily_prod",
+        ):
+            self.assertIn(f"task_key: {task_key}", daily)
+
+        self.assertEqual(daily.count("condition_task:"), 2)
+        self.assertEqual(daily.count("existing_cluster_id: 5925-212130-elwuj3uu"), 7)
+        self.assertIn('left: "{{tasks.discover_daily_files.values.has_new_file}}"', daily)
+        self.assertIn('left: "{{job.parameters.promote_to_prod}}"', daily)
+        self.assertIn('source_uri: "{{tasks.discover_daily_files.values.source_uri}}"', daily)
+        self.assertIn('default: "false"', daily)
+        self.assertNotIn("schedule:", daily)
+        self.assertNotIn("sql_task:", daily)
+
+        notebook_paths = re.findall(
+            r"notebook_path: .*/finops-cloud_data_platform/(.+)", daily
         )
         for relative_path in notebook_paths:
             self.assertTrue((ROOT / f"{relative_path}.ipynb").is_file(), relative_path)

@@ -2,6 +2,7 @@ resources:
   jobs:
     finops_prod_billing_promotion_with_photon:
       name: finops-prod-billing-promotion-with_photon
+      max_concurrent_runs: 1
       tasks:
         - task_key: check_environment_prod
           notebook_task:
