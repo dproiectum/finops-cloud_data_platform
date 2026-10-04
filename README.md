@@ -56,6 +56,9 @@ For provisional daily files in an open month, follow
 test discovery, DEV loading, validation, and controlled PROD promotion before
 adding the daily schedule.
 
+The remaining Databricks Belgium work and its acceptance checks are tracked in
+[docs/databricks_belgium_completion_plan.md](docs/databricks_belgium_completion_plan.md).
+
 After PROD validation, the read-only Streamlit application in
 [`apps/finops_dashboard`](apps/finops_dashboard) exposes the certified datamarts,
 cost definitions, FOCUS column dictionary, data quality and pipeline operations.

@@ -8,8 +8,11 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from config import DashboardConfig
+from charts import (
+    charge_cost_chart, comparable_years, savings_cost_chart, service_cost_chart, year_history,
+)
 from data_access import DatabricksDataSource
-from formatting import chart_layout, integer, money, percent
+from formatting import chart_layout, financial_table, integer, money, percent
 from knowledge import cost_formulas, focus_columns, glossary
 import queries
 
@@ -83,45 +86,6 @@ def require_row(frame: pd.DataFrame, subject: str) -> pd.Series:
         st.warning(f"No certified {subject} data is available for this selection.")
         st.stop()
     return frame.iloc[0]
-
-
-PAGES = [
-    "Knowledge Base",
-    "Executive Overview",
-    "Cost Drivers",
-    "Savings",
-    "Allocation & Accountability",
-    "Resources",
-    "Operations & Quality",
-    "Architecture",
-]
-
-with st.sidebar:
-    st.markdown("### FinOps Control Center")
-    st.caption("Certified cloud cost intelligence")
-    st.markdown(
-        f'<span class="status-pill">{source.label} · {config.environment.upper()}</span>',
-        unsafe_allow_html=True,
-    )
-    st.divider()
-    page = st.radio("Navigation", PAGES, label_visibility="collapsed")
-    needs_month = page not in {"Knowledge Base", "Architecture"}
-    selected_month = None
-    if needs_month:
-        try:
-            month_frame = load_frame(queries.available_months(config))
-            months = month_frame["billing_month"].astype(str).tolist()
-        except Exception as exc:
-            st.error("Certified datamarts are unavailable")
-            st.code(str(exc))
-            st.stop()
-        if not months:
-            st.warning("No billing month is available")
-            st.stop()
-        selected_month = st.selectbox("Billing month", months, index=0)
-    st.divider()
-    st.caption(f"Catalog: {config.data_catalog}")
-    st.caption("Read-only · certified datamarts")
 
 
 def page_title(kicker: str, title: str, subtitle: str | None = None) -> None:
@@ -198,7 +162,7 @@ def executive_page(month: str) -> None:
     savings = require_row(load_frame(queries.savings_summary(config, month)), "savings")
     delta = None
     if not pd.isna(summary["month_change_rate"]):
-        delta = f"{float(summary['month_change_rate']):+.2f}% MoM"
+        delta = f"{percent(summary['month_change_rate'], signed=True)} MoM"
 
     primary = st.columns(4)
     primary[0].metric("Billed cost", money(summary["billed_cost"]), delta=delta)
@@ -215,7 +179,7 @@ def executive_page(month: str) -> None:
     )
 
     daily = load_frame(queries.daily_trend(config, month))
-    monthly = load_frame(queries.monthly_trend(config))
+    monthly = year_history(load_frame(queries.monthly_trend(config)), month[:4])
     left, right = st.columns([1.25, 1])
     with left:
         figure = px.area(
@@ -237,7 +201,76 @@ def executive_page(month: str) -> None:
             labels={"billing_month": "Month", "monthly_billed_cost": "Billed cost (€)"},
             color_discrete_sequence=["#00a4ef"],
         )
+        figure.update_xaxes(type="category")
         st.plotly_chart(chart_layout(figure), width="stretch")
+
+
+def executive_annual_page(year: str, other_year: str | None = None) -> None:
+    history = load_frame(queries.executive_history(config))
+    annual = year_history(history, year)
+    if annual.empty:
+        st.warning("No executive data is available for this year.")
+        return
+    page_title("FINOPS · EXECUTIVE", "Executive Overview", f"Selected year: {year}")
+    comparable = None
+    common = []
+    if other_year is not None:
+        annual, comparable, common = comparable_years(history, year, other_year)
+        if not common:
+            st.warning("The two years have no loaded month in common; no comparison is calculated.")
+            return
+        st.info(
+            f"Comparable months only: {', '.join(common)}. "
+            f"Both {year} and {other_year} use exactly these months; missing months are not zero."
+        )
+    else:
+        st.caption(
+            f"Loaded months: {', '.join(annual['billing_month'].astype(str))}. "
+            "This is not a full-year total unless all 12 months are loaded."
+        )
+    billed = annual["billed_cost"].sum()
+    effective = annual["effective_cost"].sum()
+    list_cost = annual["list_cost"].sum()
+    difference = list_cost - effective
+    rate = 0 if list_cost == 0 else 100 * difference / list_cost
+    change = None
+    if comparable is not None:
+        baseline = comparable["billed_cost"].sum()
+        if baseline != 0:
+            change = f"{percent(100 * (billed - baseline) / abs(baseline), signed=True)} YoY"
+        else:
+            st.caption("YoY percentage is unavailable because the comparison-year billed cost is zero.")
+    cards = st.columns(4)
+    cards[0].metric("Billed cost", money(billed), delta=change)
+    cards[1].metric("Effective cost", money(effective))
+    cards[2].metric("Difference vs list", money(difference))
+    cards[3].metric("Difference rate", percent(rate))
+    st.caption(
+        f"Charge lines: {integer(annual['charge_lines'].sum())} · Loaded months: {len(annual)}. "
+        "Monthly resource and service counts are not summed into annual distinct counts."
+    )
+    if comparable is not None:
+        chart_frame = pd.concat([
+            annual.assign(year=year), comparable.assign(year=other_year)
+        ], ignore_index=True)
+        figure = px.bar(
+            chart_frame, x="month_number", y="billed_cost", color="year", barmode="group",
+            title="Billed cost: same months, two years",
+            labels={"month_number": "Month number", "billed_cost": "Billed cost (€)", "year": "Year"},
+            color_discrete_sequence=["#0078d4", "#8a8886"],
+        )
+        figure.update_xaxes(type="category", categoryorder="array", categoryarray=common)
+        st.dataframe(financial_table(chart_frame.drop(columns="month_number")),
+                     hide_index=True, width="stretch")
+    else:
+        figure = px.bar(
+            annual, x="billing_month", y="billed_cost", title="Billed cost by loaded month",
+            labels={"billing_month": "Month", "billed_cost": "Billed cost (€)"},
+            color_discrete_sequence=["#0078d4"],
+        )
+        figure.update_xaxes(type="category")
+        st.dataframe(financial_table(annual), hide_index=True, width="stretch")
+    st.plotly_chart(chart_layout(figure, 420), width="stretch")
 
 
 def cost_drivers_page(month: str) -> None:
@@ -258,31 +291,16 @@ def cost_drivers_page(month: str) -> None:
 
     left, right = st.columns(2)
     with left:
-        figure = px.bar(
-            services.sort_values("total_billed_cost"),
-            x="total_billed_cost",
-            y="service_name",
-            orientation="h",
-            color="service_category",
-            title="Top services for the selected month",
-            labels={"total_billed_cost": "Cost (€)", "service_name": "Service"},
-        )
-        st.plotly_chart(chart_layout(figure, 520), width="stretch")
+        st.plotly_chart(service_cost_chart(services, "Which services drive the bill?"),
+                        width="stretch")
+        st.caption("One bar per service; highest billed cost first. Only the top 20 are shown.")
     with right:
-        charge_summary = (
-            charges.groupby("charge_category", dropna=False)["total_billed_cost"]
-            .sum()
-            .reset_index()
+        st.plotly_chart(charge_cost_chart(charges), width="stretch")
+        st.caption(
+            "Usage: consumption charges; Purchase: purchases; Tax: taxes; "
+            "Credit: credit records; Adjustment: corrections. "
+            "Bars left of zero reduce the net bill; bars right of zero increase it."
         )
-        figure = px.bar(
-            charge_summary,
-            x="charge_category",
-            y="total_billed_cost",
-            title="Cost by charge category",
-            labels={"total_billed_cost": "Cost (€)", "charge_category": "Category"},
-            color_discrete_sequence=["#0078d4"],
-        )
-        st.plotly_chart(chart_layout(figure, 520), width="stretch")
 
     service_tab, sku_tab, charge_tab = st.tabs(
         ["Portfolio services", "Portfolio SKUs", "Charge details"]
@@ -290,49 +308,55 @@ def cost_drivers_page(month: str) -> None:
     with service_tab:
         st.caption("Cumulative view across all loaded months")
         st.dataframe(
-            load_frame(queries.portfolio_services(config)), hide_index=True, width="stretch"
+            financial_table(load_frame(queries.portfolio_services(config))),
+            hide_index=True,
+            width="stretch",
         )
     with sku_tab:
         st.caption("The current SKU datamart is cumulative across all loaded months")
-        st.dataframe(load_frame(queries.sku_costs(config)), hide_index=True, width="stretch")
+        st.dataframe(
+            financial_table(load_frame(queries.sku_costs(config))),
+            hide_index=True,
+            width="stretch",
+        )
     with charge_tab:
-        st.dataframe(charges, hide_index=True, width="stretch")
+        st.dataframe(financial_table(charges), hide_index=True, width="stretch")
 
 
 def savings_page(month: str) -> None:
     page_title("FINOPS · OPTIMIZE", "Savings Analysis", f"Selected period: {month}")
     savings = require_row(load_frame(queries.savings_summary(config, month)), "savings")
-    history = load_frame(queries.monthly_savings(config))
+    history = year_history(load_frame(queries.monthly_savings(config)), month[:4])
+    benefit = savings["list_cost"] - savings["effective_cost"]
     cards = st.columns(4)
-    cards[0].metric("Negotiated difference", money(savings["negotiated_savings"]))
-    cards[1].metric("Commitment difference", money(savings["commitment_savings"]))
-    cards[2].metric("Total difference vs list", money(savings["total_savings"]))
-    cards[3].metric("Difference rate", percent(savings["savings_rate"]))
-    long_frame = history.melt(
-        id_vars="billing_month",
-        value_vars=["negotiated_savings", "commitment_savings"],
-        var_name="comparison",
-        value_name="amount",
-    )
-    long_frame["comparison"] = long_frame["comparison"].map(
-        {
-            "negotiated_savings": "List − Contracted",
-            "commitment_savings": "Contracted − Effective",
-        }
-    )
+    cards[0].metric("List price", money(savings["list_cost"]))
+    cards[1].metric("Contracted price", money(savings["contracted_cost"]))
+    cards[2].metric("Effective cost", money(savings["effective_cost"]))
+    cards[3].metric("Net price benefit", money(benefit))
+    st.caption(f"Net price benefit rate: {percent(savings['savings_rate'])}.")
+    figure, stacked = savings_cost_chart(history)
+    st.plotly_chart(figure, width="stretch")
+    if stacked:
+        st.caption(
+            "Each column reaches the list price. Dark blue is effective cost; "
+            "light blue is the net price benefit. The diamond marks the contracted price. "
+            "These cost bases are not added together."
+        )
+    else:
+        st.info(
+            "Some months have a negative or missing cost, or an effective cost above the list price. "
+            "Their three cost bases are shown side by side rather than as a positive savings stack."
+        )
+    st.dataframe(financial_table(history), hide_index=True, width="stretch")
     figure = px.bar(
-        long_frame,
+        history,
         x="billing_month",
-        y="amount",
-        color="comparison",
-        barmode="relative",
-        title="Monthly cost differences",
-        labels={"billing_month": "Month", "amount": "Difference (€)"},
-        color_discrete_map={
-            "List − Contracted": "#0078d4",
-            "Contracted − Effective": "#50e6ff",
-        },
+        y="total_savings",
+        title="Net price benefit by month",
+        labels={"billing_month": "Month", "total_savings": "Net price benefit (€)"},
+        color_discrete_sequence=["#0078d4"],
     )
+    figure.update_xaxes(type="category")
     st.plotly_chart(chart_layout(figure, 440), width="stretch")
     st.warning(
         "These are technical comparisons between FOCUS cost columns. Negative values "
@@ -367,15 +391,13 @@ def allocation_page(month: str) -> None:
         ["Services", "Cost centers", "Subscriptions", "Application owners"]
     )
     with service_tab:
-        figure = px.bar(
-            services.sort_values("total_billed_cost"),
-            x="total_billed_cost",
-            y="service_name",
-            orientation="h",
-            color="service_category",
-            title="Service allocation",
+        order = st.selectbox(
+            "Service order", ["Highest cost first", "Lowest cost first", "Name A–Z"],
+            key="service_order",
         )
-        st.plotly_chart(chart_layout(figure, 540), width="stretch")
+        st.plotly_chart(service_cost_chart(services, "Billed cost by service", order),
+                        width="stretch")
+        st.caption("One color and one bar per service; this view shows the top 30 services by cost.")
     with center_tab:
         figure = px.treemap(
             centers,
@@ -384,13 +406,19 @@ def allocation_page(month: str) -> None:
             color="total_billed_cost",
             color_continuous_scale=["#deecf9", "#71afe5", "#0078d4", "#005a9e"],
             title="Cost-center allocation",
+            labels={"total_billed_cost": "Billed cost (€)", "cost_center": "Cost center"},
         )
+        figure.update_traces(
+            customdata=[[money(value)] for value in figure.data[0].values],
+            hovertemplate="%{label}<br>Billed cost: %{customdata[0]}<extra></extra>",
+        )
+        figure.update_coloraxes(colorbar_tickformat=",.0f")
         st.plotly_chart(chart_layout(figure, 520), width="stretch")
-        st.dataframe(centers, hide_index=True, width="stretch")
+        st.dataframe(financial_table(centers), hide_index=True, width="stretch")
     with subscription_tab:
-        st.dataframe(subscriptions, hide_index=True, width="stretch")
+        st.dataframe(financial_table(subscriptions), hide_index=True, width="stretch")
     with owner_tab:
-        st.dataframe(owners, hide_index=True, width="stretch")
+        st.dataframe(financial_table(owners), hide_index=True, width="stretch")
 
 
 def resources_page(month: str) -> None:
@@ -416,9 +444,10 @@ def resources_page(month: str) -> None:
             orientation="h",
             color="region",
             title="Top resources by cost",
+            labels={"total_billed_cost": "Cost (€)", "resource_name": "Resource"},
         )
         st.plotly_chart(chart_layout(figure, 560), width="stretch")
-        st.dataframe(resources, hide_index=True, width="stretch")
+        st.dataframe(financial_table(resources), hide_index=True, width="stretch")
     with group_tab:
         figure = px.bar(
             groups.head(20).sort_values("total_billed_cost"),
@@ -426,14 +455,15 @@ def resources_page(month: str) -> None:
             y="resource_group_name",
             orientation="h",
             title="Cost by resource group",
+            labels={"total_billed_cost": "Cost (€)", "resource_group_name": "Resource group"},
             color_discrete_sequence=["#0078d4"],
         )
         st.plotly_chart(chart_layout(figure, 560), width="stretch")
-        st.dataframe(groups, hide_index=True, width="stretch")
+        st.dataframe(financial_table(groups), hide_index=True, width="stretch")
     with portfolio_tab:
         st.caption("Cumulative view across all loaded months")
         st.dataframe(
-            load_frame(queries.portfolio_resources(config)),
+            financial_table(load_frame(queries.portfolio_resources(config))),
             hide_index=True,
             width="stretch",
         )
@@ -472,14 +502,14 @@ def operations_page(month: str) -> None:
             ],
             columns=["Control", "Value"],
         )
-        st.dataframe(controls, hide_index=True, width="stretch")
+        st.dataframe(financial_table(controls), hide_index=True, width="stretch")
         st.write(f"Latest Silver publication: **{quality['latest_silver_load']}**")
     with runs_tab:
         st.dataframe(runs, hide_index=True, width="stretch")
     with reconciliation_tab:
-        st.dataframe(reconciliations, hide_index=True, width="stretch")
+        st.dataframe(financial_table(reconciliations), hide_index=True, width="stretch")
     with environments_tab:
-        st.dataframe(counts, hide_index=True, width="stretch")
+        st.dataframe(financial_table(counts), hide_index=True, width="stretch")
         st.caption(
             "DEV and PROD share finops_ops.audit but remain isolated by the environment column."
         )
@@ -579,19 +609,68 @@ def architecture_page() -> None:
         )
 
 
-if page == "Knowledge Base":
-    knowledge_page()
-elif page == "Executive Overview":
-    executive_page(selected_month)
-elif page == "Cost Drivers":
-    cost_drivers_page(selected_month)
-elif page == "Savings":
-    savings_page(selected_month)
-elif page == "Allocation & Accountability":
-    allocation_page(selected_month)
-elif page == "Resources":
-    resources_page(selected_month)
-elif page == "Operations & Quality":
-    operations_page(selected_month)
-else:
-    architecture_page()
+def executive_entry() -> None:
+    if overview_view == "Monthly":
+        executive_page(selected_month)
+    else:
+        executive_annual_page(selected_year, comparison_year)
+
+
+# Native top navigation: only the selected page runs, with bookmarkable page URLs.
+navigation = st.navigation([
+    st.Page(executive_entry, title="Executive Overview", url_path="overview", default=True),
+    st.Page(lambda: cost_drivers_page(selected_month), title="Cost Drivers", url_path="drivers"),
+    st.Page(lambda: savings_page(selected_month), title="Savings", url_path="savings"),
+    st.Page(lambda: allocation_page(selected_month), title="Allocation & Accountability",
+            url_path="allocation"),
+    st.Page(lambda: resources_page(selected_month), title="Resources", url_path="resources"),
+    st.Page(lambda: operations_page(selected_month), title="Operations & Quality",
+            url_path="operations"),
+    st.Page(knowledge_page, title="Knowledge Base", url_path="knowledge"),
+    st.Page(architecture_page, title="Architecture", url_path="architecture"),
+], position="top")
+
+with st.sidebar:
+    st.markdown("### FinOps Control Center")
+    st.caption("Certified cloud cost intelligence")
+    st.markdown(
+        f'<span class="status-pill">{source.label} · {config.environment.upper()}</span>',
+        unsafe_allow_html=True,
+    )
+    st.divider()
+    needs_month = navigation.title not in {"Knowledge Base", "Architecture"}
+    selected_month = None
+    overview_view = "Monthly"
+    selected_year = None
+    comparison_year = None
+    if needs_month:
+        try:
+            month_frame = load_frame(queries.available_months(config))
+            months = sorted(month_frame["billing_month"].astype(str).unique(), reverse=True)
+        except Exception as exc:
+            st.error("Certified datamarts are unavailable")
+            st.code(str(exc))
+            st.stop()
+        if not months:
+            st.warning("No billing month is available")
+            st.stop()
+        years = sorted({month[:4] for month in months}, reverse=True)
+        selected_year = st.selectbox("Billing year", years, key="billing_year")
+        if navigation.title == "Executive Overview":
+            views = ["Monthly", "Annual"]
+            if len(years) > 1:
+                views.append("Year-over-year")
+            overview_view = st.selectbox("Overview view", views, key="overview_view")
+        if overview_view == "Monthly":
+            year_months = [month for month in months if month.startswith(f"{selected_year}-")]
+            selected_month = st.selectbox("Billing month", year_months, key="billing_month")
+        elif overview_view == "Year-over-year":
+            comparison_year = st.selectbox(
+                "Compare with year", [year for year in years if year != selected_year],
+                key="comparison_year",
+            )
+    st.divider()
+    st.caption(f"Catalog: {config.data_catalog}")
+    st.caption("Read-only · certified datamarts")
+
+navigation.run()

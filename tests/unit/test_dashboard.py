@@ -40,6 +40,13 @@ class DashboardTests(unittest.TestCase):
         self.assertIn("environment = 'prod'", reconciliation_sql)
         self.assertIn("`finops_ops`.`audit`.`pipeline_run`", pipeline_sql)
 
+    def test_service_query_aggregates_before_top_n_limit(self):
+        sql = queries.services(DashboardConfig.from_environment(), "2026-06", 30)
+        self.assertIn("GROUP BY service_name", sql)
+        self.assertNotIn("GROUP BY service_category", sql)
+        self.assertIn("SUM(total_billed_cost)", sql)
+        self.assertIn("LIMIT 30", sql)
+
     def test_knowledge_pages_keep_columns_and_formulas(self):
         content = (APP / "knowledge.py").read_text(encoding="utf-8")
         for name in (

@@ -47,8 +47,9 @@ Pour le scénario Classic Belgique, le modèle YAML prêt à importer est :
 platform/classic_compute/jobs/daily_dev_to_prod.yml
 ```
 
-Il utilise le cluster All-Purpose belge pour toutes les tâches Notebook, garde
-`promote_to_prod=false` par défaut et ne crée aucun schedule avant les tests.
+Il utilise le cluster All-Purpose belge pour toutes les tâches Notebook. Ses
+valeurs par défaut sont `discovery_environment=prod` et
+`promote_to_prod=true`; aucun schedule n'est créé avant les tests.
 
 Construire le DAG :
 

@@ -20,7 +20,131 @@ tables and the environment-aware `finops_ops.audit` history.
 
 The application never writes to Unity Catalog.
 
-## Databricks App resources
+Amounts, percentages and counts use European display formatting (for example,
+`912 000,00 €`, `14,66 %` and `164 145`), including financial tables and monetary
+chart axes. Monthly charts treat `YYYY-MM` as a category so that each month remains
+readable. Formatting does not change stored values. Read-only query changes
+aggregate services by name and expose existing cost bases for the new views.
+The deployed application receives these changes only after its source is updated
+and a new revision is deployed.
+
+## Periods and chart interpretation
+
+- The native top navigation bar replaces the sidebar radio selector. The sidebar
+  holds year, month and comparison filters; only the selected page is executed.
+- Select a billing year before choosing a month. Executive Overview also offers
+  Annual and, when two years are available, Year-over-year views.
+- Annual totals include only loaded months. Year-over-year comparisons use the
+  intersection of loaded month numbers in the two selected years, not a complete
+  year against a partial year. The difference rate is computed from summed cost
+  bases, not the average of monthly rates. Distinct monthly resource/service counts
+  are not summed into annual distinct counts.
+- Savings stacks EffectiveCost (dark blue) and the net benefit relative to ListCost
+  (light blue). Their total equals ListCost. ContractedCost is a diamond marker,
+  not a third stacked amount. If any displayed cost basis is negative, missing,
+  or EffectiveCost exceeds ListCost, the view uses grouped cost-basis bars instead
+  of clipping values into positive savings. A separate monthly net-benefit series
+  and the underlying table remain available. These synthetic comparisons do not
+  establish realized organizational savings.
+- Service charts aggregate by service name before applying their top-N limit.
+  Each name has one blue bar, with no service-category legend. Allocation provides
+  highest-cost-first, lowest-cost-first and alphabetical order for the displayed
+  top 30 services. Cost Drivers shows the top 20 and explains charge categories;
+  negative charges remain visible to the left of zero.
+
+## Security boundary
+
+The current backend identity and read-only SQL access are separate from viewer
+authorization. No viewer-specific role/scope enforcement is implemented yet.
+The proposed controls in the thesis require authenticated identity verification,
+deny-by-default entitlements, scoped SQL queries and cache isolation by authorized
+scope. Existing globally aggregated datamarts cannot enforce an application-owner
+perimeter after aggregation; scoped products or queries must retain the required
+business keys. A public portfolio must use synthetic data only; a demonstration
+persona selector is not production authentication.
+
+### Planned implementation and thesis evidence
+
+1. Confirm the application/project/domain keys and the hierarchy used for scopes.
+   The owner datamart retains `application_code`; the scope/service datamart does
+   not, and the executive and savings datamarts are global monthly aggregates.
+   Filtering only the owner page would leave other pages leaking global data.
+2. Create `finops_ops.security.user_entitlement` and `business_scope`, and populate
+   approved synthetic assignments for a first controlled demonstration. This is
+   additive setup, not a catalog reset or a full data reload.
+3. Enforce scope in every query before aggregation, using parameters and an
+   authorized key set. Add or refresh only the scoped products that are required
+   if existing products lack the necessary keys. Keep OPS administrative views
+   restricted to the appropriate role.
+4. Isolate cached query results by resolved scope and entitlement version. Test
+   both page navigation and table export; hiding navigation is not authorization.
+5. For deployed authentication, configure IAP, validate the signed assertion with
+   its expected audience and expiry, and reject missing or invalid identities.
+   A fixed-persona selector is a synthetic authorization test harness only.
+6. Retain denial/isolation tests, deployed revision, sanitized grants and matched
+   scoped totals. Chapter 5.3.6 describes the design; chapter 7.5 reports results
+   only after execution. Until then, describe these controls as proposed.
+
+Sources: https://docs.cloud.google.com/iap/docs/identity-howto;
+https://docs.cloud.google.com/iap/docs/signed-headers-howto.
+
+## Cloud Run deployment: current dashboard
+
+The current service is `finops-center` in project `global-repeater-355412`, region
+`europe-west1`. Both URLs address the same service:
+
+```text
+https://finops-center-243421621568.europe-west1.run.app/
+https://finops-center-wf2b3fv3sq-ew.a.run.app/
+```
+
+The enabled Cloud Build trigger watches `main` in
+`https://github.com/dproiectum/finops-cloud_data_platform`, uses
+`apps/finops_dashboard/Dockerfile`, and deploys that service. Its ID is
+`aadfa4c5-3885-4a5f-83ff-5fd12e7829a5`; the trigger region is `global`, distinct
+from the service region. This was read from the live configuration on 4 October
+2026. There are currently no included/ignored-file filters, so any push to that
+branch can initiate deployment. The inspected service has invoker IAM checking
+disabled; this is not evidence of IAP or user-level scope protection.
+
+After review, publish only the dashboard changes from the Cloud platform repo:
+
+```bash
+cd "/Users/dtl/Desktop/PFE/FinOps Cloud Data Platform"
+git add -- apps/finops_dashboard/app.py apps/finops_dashboard/charts.py apps/finops_dashboard/formatting.py apps/finops_dashboard/queries.py apps/finops_dashboard/README.md tests/unit/test_dashboard.py tests/unit/test_dashboard_presentation.py
+git diff --cached --check
+git diff --cached --stat
+git commit -m "Improve cloud dashboard navigation, cost charts and yearly views"
+git push origin main
+```
+
+Do not include unrelated working-tree changes. If Git rejects the push because
+the remote advanced, fetch and reconcile the commits rather than forcing it.
+The push triggers a new build and deployment, which can incur GCP charges.
+
+1. Open Cloud Build **History**, choose region **Global**, and find the build for
+   the pushed commit. Wait for success, not just a successful image build step.
+2. Open Cloud Run **finops-center > Revisions** and verify the new ready revision
+   receives traffic and its commit label matches the pushed commit.
+3. Reload the dashboard. Verify European metrics/table/hover formats, the top
+   navigation, sorting, Savings and both annual views. Preserve a C5 screenshot
+   only after this verification.
+4. No Databricks ingestion pipeline or table-creation SQL needs to run for these
+   presentation changes. Keep the existing credentials and SQL Warehouse config.
+
+If the trigger did not run, the operator can launch it manually:
+
+```bash
+gcloud builds triggers run aadfa4c5-3885-4a5f-83ff-5fd12e7829a5 --branch=main --region=global --project=global-repeater-355412
+```
+
+This starts a build/deployment. Do not run it again if the pushed commit already
+has a successful deployed build. Restarting Streamlit or redeploying the old image
+alone does not incorporate changed source code.
+
+Source: https://docs.cloud.google.com/run/docs/continuous-deployment.
+
+## Alternative: Databricks App resources
 
 Create a custom Databricks App and add the SQL Warehouse with resource key:
 
@@ -53,7 +177,7 @@ Keep the backticks around the application ID. If your
 governance policy requires table-level grants, grant `SELECT` only on the
 datamarts and the `pipeline_run` and `monthly_reconciliation` audit tables.
 
-## Deployment
+## Alternative: Databricks App deployment
 
 1. Pull the latest `main` branch into the Databricks Git Folder.
 2. Open **Databricks Apps** and create a custom app named `finops-center`.

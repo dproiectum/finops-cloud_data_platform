@@ -65,6 +65,15 @@ def monthly_trend(config: DashboardConfig) -> str:
     """
 
 
+def executive_history(config: DashboardConfig) -> str:
+    return f"""
+        SELECT billing_month, charge_lines, billed_cost, effective_cost,
+               list_cost, total_savings_vs_list AS savings_vs_list
+        FROM {config.datamart('dm_executive_summary_monthly')}
+        ORDER BY billing_month
+    """
+
+
 def daily_trend(config: DashboardConfig, month: str) -> str:
     value = _literal(month)
     return f"""
@@ -88,7 +97,8 @@ def savings_summary(config: DashboardConfig, month: str) -> str:
 
 def monthly_savings(config: DashboardConfig) -> str:
     return f"""
-        SELECT billing_month, negotiated_savings, commitment_savings,
+        SELECT billing_month, list_cost, contracted_cost, effective_cost,
+               negotiated_savings, commitment_savings,
                total_savings_vs_list AS total_savings, savings_rate
         FROM {config.datamart('dm_savings_monthly')}
         ORDER BY billing_month
@@ -98,11 +108,11 @@ def monthly_savings(config: DashboardConfig) -> str:
 def services(config: DashboardConfig, month: str, limit: int = 15) -> str:
     value = _literal(month)
     return f"""
-        SELECT service_category, service_name,
+        SELECT service_name,
                SUM(total_billed_cost) AS total_billed_cost
         FROM {config.datamart('dm_cost_by_scope_service_month')}
         WHERE billing_month = '{value}'
-        GROUP BY service_category, service_name
+        GROUP BY service_name
         ORDER BY total_billed_cost DESC
         LIMIT {int(limit)}
     """
@@ -179,8 +189,9 @@ def application_owners(config: DashboardConfig, month: str, limit: int = 50) -> 
 
 def portfolio_services(config: DashboardConfig) -> str:
     return f"""
-        SELECT service_category, service_name, total_billed_cost
+        SELECT service_name, SUM(total_billed_cost) AS total_billed_cost
         FROM {config.datamart('dm_top_services')}
+        GROUP BY service_name
         ORDER BY total_billed_cost DESC
         LIMIT 30
     """
