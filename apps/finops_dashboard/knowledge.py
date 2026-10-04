@@ -26,18 +26,37 @@ def cost_formulas() -> pd.DataFrame:
             (
                 "Effective cost",
                 "SUM(EffectiveCost)",
-                "Economic cost after discounts and commitment-benefit allocation.",
+                "Aggregate the source-provided amortized cost, including discounts and "
+                "allocated prepaid purchases. The dashboard does not recalculate amortization.",
+            ),
+            (
+                "Effective cost breakdown",
+                "Reservation + Savings Plan + Usage On-Demand + Usage Dynamic + Adjustment "
+                "(+ Other Charges, when present)",
+                "Each component sums EffectiveCost for a mutually exclusive group of source rows. "
+                "This is not Contract Cost plus the full purchase price of RI/SP contracts.",
+            ),
+            (
+                "Reservation / Savings Plan",
+                "SUM(EffectiveCost) for Usage + Commitment-Based, grouped by CommitmentDiscountType",
+                "Reservation and Savings Plan are separate allocations of effective usage cost; "
+                "they are not the full purchase amounts of the contracts.",
+            ),
+            (
+                "Usage On-Demand / Usage Dynamic",
+                "SUM(EffectiveCost) for Usage, grouped by PricingCategory",
+                "On-Demand and Dynamic usage are separate from commitment-based usage.",
+            ),
+            (
+                "Adjustment / Other Charges",
+                "SUM(EffectiveCost) for Adjustment / for all remaining rows",
+                "Adjustments retain their sign. Other Charges is displayed only when its net "
+                "amount is non-zero; it keeps taxes, credits and unclassified charges in the total.",
             ),
             (
                 "Negotiated difference",
                 "List cost − Contracted cost",
                 "Technical price comparison; it is not automatically verified cash savings.",
-            ),
-            (
-                "Commitment difference",
-                "Contracted cost − Effective cost",
-                "May be negative. Eligibility and coverage must be validated before "
-                "calling it realized savings.",
             ),
             (
                 "Total difference vs list",
@@ -68,7 +87,7 @@ def focus_columns() -> pd.DataFrame:
     return pd.DataFrame(
         [
             ("BilledCost", "Cost", "Amount invoiced in BillingCurrency", "No"),
-            ("EffectiveCost", "Cost", "Cost after allocated discounts and benefits", "No"),
+            ("EffectiveCost", "Cost", "Amortized cost including discounts and allocated prepaid purchases", "No"),
             ("ListCost", "Cost", "Cost evaluated at list pricing", "No"),
             ("ContractedCost", "Cost", "Cost evaluated at negotiated pricing", "No"),
             ("BillingCurrency", "Cost", "Currency used for billing; EUR in this project", "No"),

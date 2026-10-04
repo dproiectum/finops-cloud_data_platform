@@ -1,4 +1,5 @@
 from pathlib import Path
+import sqlite3
 import sys
 import tomllib
 import unittest
@@ -88,6 +89,52 @@ class SqlModelTests(unittest.TestCase):
     def test_all_datamarts_are_rebuilt_instead_of_appended(self):
         for relative_path in DATAMART_SCRIPTS:
             self.assertIn("CREATE OR REPLACE TABLE", sql_text(relative_path))
+
+    def test_savings_components_are_exclusive_and_reconcile_with_effective_cost(self):
+        # Execute the unchanged SELECT/CTE with the standard-library SQL engine.
+        # Databricks-specific CTAS syntax is covered separately by rendering tests.
+        rendered = render_sql("datamarts/table_refresh/08_dm_savings_monthly.sql", {
+            "silver_central": "source", "dm_savings_monthly": "result",
+        })
+        query = rendered.split("USING DELTA AS", 1)[1]
+        with sqlite3.connect(":memory:") as connection:
+            connection.execute("""CREATE TABLE source (
+                billing_month TEXT, ListCost REAL, ContractedCost REAL, EffectiveCost REAL,
+                ChargeCategory TEXT, PricingCategory TEXT, CommitmentDiscountType TEXT
+            )""")
+            charges = [
+                ("Usage", "Commitment-Based", "Reservation", 100),
+                ("Usage", "Commitment-Based", "Savings Plan", 150),
+                ("Usage", "On-Demand", None, 850),
+                ("Usage", "Dynamic", None, 5),
+                ("Adjustment", "Commitment-Based", "Reservation", -5),
+                ("Purchase", "Commitment-Based", "Reservation", 0),
+                ("Tax", None, None, 3),
+                ("Credit", None, None, -5),
+                ("Usage", "Commitment-Based", "Unknown program", 8),
+                ("Usage", None, None, 2),
+                (None, None, None, -1),
+            ]
+            connection.executemany("INSERT INTO source VALUES (?, ?, ?, ?, ?, ?, ?)", [
+                ("2026-01", 200, 150, amount, charge, price, program)
+                for charge, price, program, amount in charges
+            ])
+            connection.execute("INSERT INTO source VALUES (NULL, 1000, 1000, 1000, 'Usage', 'On-Demand', NULL)")
+            cursor = connection.execute(query)
+            row = dict(zip([item[0] for item in cursor.description], cursor.fetchone()))
+            self.assertIsNone(cursor.fetchone())
+        self.assertEqual(row["reservation"], 100)
+        self.assertEqual(row["savings_plan"], 150)
+        self.assertEqual(row["usage_on_demand"], 850)
+        self.assertEqual(row["usage_dynamic"], 5)
+        self.assertEqual(row["adjustment"], -5)
+        self.assertEqual(row["other_effective_cost"], 7)
+        self.assertEqual(sum(row[key] for key in (
+            "reservation", "savings_plan", "usage_on_demand", "usage_dynamic", "adjustment",
+            "other_effective_cost",
+        )), row["effective_cost"])
+        self.assertEqual(row["total_savings_vs_list"], row["list_cost"] - row["effective_cost"])
+        self.assertEqual(row["negotiated_savings"], row["list_cost"] - row["contracted_cost"])
 
     def test_full_reset_drops_exactly_the_four_project_catalogs(self):
         reset = sql_text("controls/00_drop_all_project_catalogs.sql")

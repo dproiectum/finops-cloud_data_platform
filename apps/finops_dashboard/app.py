@@ -12,7 +12,10 @@ from charts import (
     charge_cost_chart, comparable_years, savings_cost_chart, service_cost_chart, year_history,
 )
 from data_access import DatabricksDataSource
-from formatting import chart_layout, financial_table, integer, money, percent
+from formatting import (
+    SAVINGS_COMPONENTS, chart_layout, financial_table, integer, money, percent,
+    savings_detail_table,
+)
 from knowledge import cost_formulas, focus_columns, glossary
 import queries
 
@@ -115,8 +118,8 @@ def knowledge_page() -> None:
         )
         st.markdown(
             "Negative costs are retained because credits, refunds and adjustments are "
-            "valid FOCUS records. A negative commitment difference is therefore shown, "
-            "not hidden or forced to zero."
+            "valid FOCUS records. A negative net price benefit indicates that effective "
+            "cost exceeds list cost; it is not hidden or forced to zero."
         )
     with columns_tab:
         st.subheader("FOCUS and platform column dictionary")
@@ -329,32 +332,48 @@ def savings_page(month: str) -> None:
     history = year_history(load_frame(queries.monthly_savings(config)), month[:4])
     benefit = savings["list_cost"] - savings["effective_cost"]
     cards = st.columns(4)
-    cards[0].metric("List price", money(savings["list_cost"]))
-    cards[1].metric("Contracted price", money(savings["contracted_cost"]))
-    cards[2].metric("Effective cost", money(savings["effective_cost"]))
-    cards[3].metric("Net price benefit", money(benefit))
+    cards[0].metric("List Cost", money(savings["list_cost"]))
+    cards[1].metric("Contract Cost", money(savings["contracted_cost"]))
+    cards[2].metric("Effective Cost", money(savings["effective_cost"]))
+    cards[3].metric("Net Price Benefit", money(benefit))
     st.caption(f"Net price benefit rate: {percent(savings['savings_rate'])}.")
     figure, stacked = savings_cost_chart(history)
     st.plotly_chart(figure, width="stretch")
-    if stacked:
-        st.caption(
-            "Each column reaches the list price. Dark blue is effective cost; "
-            "light blue is the net price benefit. The diamond marks the contracted price. "
-            "These cost bases are not added together."
-        )
-    else:
+    if not stacked:
         st.info(
-            "Some months have a negative or missing cost, or an effective cost above the list price. "
-            "Their three cost bases are shown side by side rather than as a positive savings stack."
+            "Some months have a negative or missing cost, or effective cost above list cost. "
+            "Effective Cost and Net Price Benefit are shown side by side to retain these values."
         )
-    st.dataframe(financial_table(history), hide_index=True, width="stretch")
+    st.subheader("Detailed Table")
+    st.caption(
+        "Reservation and Savings Plan show allocated effective usage costs, not full "
+        "contract purchase amounts. The cost components add up to Effective Cost."
+    )
+    if not set(SAVINGS_COMPONENTS).issubset(history.columns):
+        st.info(
+            "The effective-cost breakdown is not available yet (—). Refresh "
+            "dm_savings_monthly with the updated 08_dm_savings_monthly.sql template; "
+            "a full ingestion reload is not required."
+        )
+    detail = savings_detail_table(history)
+    if "Other Charges" in detail.data:
+        st.caption(
+            "Other Charges includes effective costs outside the five named categories, "
+            "so the breakdown still reconciles with Effective Cost."
+        )
+    st.dataframe(detail, hide_index=True, width="stretch")
     figure = px.bar(
         history,
         x="billing_month",
         y="total_savings",
-        title="Net price benefit by month",
-        labels={"billing_month": "Month", "total_savings": "Net price benefit (€)"},
-        color_discrete_sequence=["#0078d4"],
+        title="Net Price Benefit by Month",
+        labels={"billing_month": "Month", "total_savings": "Net Price Benefit (€)"},
+        color_discrete_sequence=["#8fd5a6"],
+    )
+    figure.update_traces(
+        customdata=[[money(value) if pd.notna(value) else "Unavailable"]
+                    for value in history["total_savings"]],
+        hovertemplate="%{x}<br>Net Price Benefit: %{customdata[0]}<extra></extra>",
     )
     figure.update_xaxes(type="category")
     st.plotly_chart(chart_layout(figure, 440), width="stretch")

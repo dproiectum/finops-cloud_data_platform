@@ -5,6 +5,24 @@ from __future__ import annotations
 import pandas as pd
 
 
+SAVINGS_COMPONENTS = (
+    "reservation", "savings_plan", "usage_on_demand", "usage_dynamic", "adjustment",
+)
+SAVINGS_DETAIL_COLUMNS = {
+    "billing_month": "Billing Month",
+    "list_cost": "List Cost",
+    "contracted_cost": "Contract Cost",
+    "negotiated_savings": "Negotiated Savings",
+    "reservation": "Reservation",
+    "savings_plan": "Savings Plan",
+    "usage_on_demand": "Usage On-Demand",
+    "usage_dynamic": "Usage Dynamic",
+    "adjustment": "Adjustment",
+    "effective_cost": "Effective Cost",
+    "savings_rate": "Saving Rate",
+}
+
+
 def decimal_number(value: object, *, signed: bool = False) -> str:
     if value is None or pd.isna(value):
         value = 0
@@ -54,6 +72,28 @@ def financial_table(frame: pd.DataFrame):
     }
     return frame.style.format(
         {column: formatter for column, formatter in formatters.items() if column in frame},
+        na_rep="—",
+    )
+
+
+def savings_detail_table(frame: pd.DataFrame):
+    """Show ordered business labels; missing new measures stay unavailable."""
+    columns = dict(SAVINGS_DETAIL_COLUMNS)
+    if "other_effective_cost" in frame and (
+        pd.to_numeric(frame["other_effective_cost"], errors="coerce").fillna(0).ne(0).any()
+    ):
+        # Future tax/credit/purchase or unclassified charges must not disappear.
+        columns = {
+            **{key: value for key, value in columns.items()
+               if key not in {"effective_cost", "savings_rate"}},
+            "other_effective_cost": "Other Charges",
+            "effective_cost": "Effective Cost",
+            "savings_rate": "Saving Rate",
+        }
+    detail = frame.reindex(columns=columns).rename(columns=columns)
+    return detail.style.format(
+        {label: percent if key == "savings_rate" else money
+         for key, label in columns.items() if key != "billing_month"},
         na_rep="—",
     )
 

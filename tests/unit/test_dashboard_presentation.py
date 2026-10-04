@@ -16,7 +16,10 @@ from streamlit.testing.v1 import AppTest
 APP = Path(__file__).resolve().parents[2] / "apps/finops_dashboard"
 sys.path.insert(0, str(APP))
 
-from formatting import chart_layout, financial_table, integer, money, percent  # noqa: E402
+from formatting import (  # noqa: E402
+    SAVINGS_DETAIL_COLUMNS, chart_layout, financial_table, integer, money, percent,
+    savings_detail_table,
+)
 from data_access import DatabricksDataSource  # noqa: E402
 from charts import (  # noqa: E402
     comparable_years, cost_bridge, savings_cost_chart, service_cost_chart, charge_cost_chart,
@@ -76,6 +79,41 @@ class DashboardPresentationTests(unittest.TestCase):
         self.assertEqual(figure.layout.yaxis.tickformat, ",.0f")
         self.assertEqual(figure.layout.yaxis.hoverformat, ",.2f")
 
+    def test_savings_table_has_ordered_business_labels_and_european_values(self):
+        frame = pd.DataFrame([{
+            "billing_month": "2026-01", "list_cost": 1300, "contracted_cost": 1000,
+            "negotiated_savings": 300, "reservation": 100, "savings_plan": 150,
+            "usage_on_demand": 850, "usage_dynamic": 5, "adjustment": -5,
+            "effective_cost": 1100, "savings_rate": 15.38,
+            "commitment_savings": -100, "total_savings": 200, "other_effective_cost": 0,
+        }])
+        original = frame.copy(deep=True)
+        styled = savings_detail_table(frame)
+        self.assertEqual(list(styled.data.columns), list(SAVINGS_DETAIL_COLUMNS.values()))
+        self.assertNotIn("commitment_savings", styled.data)
+        self.assertNotIn("Other Charges", styled.data)
+        self.assertIn("1\u202f100,00 €", styled.to_html())
+        self.assertIn("-5,00 €", styled.to_html())
+        self.assertIn("15,38 %", styled.to_html())
+        pd.testing.assert_frame_equal(frame, original)
+
+    def test_savings_table_missing_components_are_not_fabricated_zeroes(self):
+        styled = savings_detail_table(pd.DataFrame([{
+            "billing_month": "2026-01", "list_cost": 1300, "contracted_cost": 1000,
+            "negotiated_savings": 300, "effective_cost": 1100, "savings_rate": 15.38,
+        }]))
+        self.assertTrue(styled.data["Reservation"].isna().all())
+        self.assertTrue(styled.data["Savings Plan"].isna().all())
+        self.assertIn("—", styled.to_html())
+
+    def test_savings_table_keeps_other_charges_when_present(self):
+        styled = savings_detail_table(pd.DataFrame([{
+            "billing_month": "2026-01", "other_effective_cost": -2.5,
+        }]))
+        self.assertEqual(list(styled.data.columns)[-3:],
+                         ["Other Charges", "Effective Cost", "Saving Rate"])
+        self.assertIn("-2,50 €", styled.to_html())
+
     def test_services_have_one_bar_per_name_and_explicit_order(self):
         frame = pd.DataFrame({
             "service_name": ["Azure NetApp Files", "Azure NetApp Files", "Compute"],
@@ -117,13 +155,17 @@ class DashboardPresentationTests(unittest.TestCase):
         self.assertEqual(figure.layout.barmode, "stack")
         self.assertEqual(list(figure.data[0].y), [1100])
         self.assertEqual(list(figure.data[1].y), [200])
-        self.assertEqual(list(figure.data[2].y), [1000])
-        self.assertEqual(figure.data[2].type, "scatter")
+        self.assertEqual(len(figure.data), 2)
+        self.assertEqual([trace.name for trace in figure.data],
+                         ["Effective Cost", "Net Price Benefit"])
+        self.assertEqual(figure.data[0].marker.color, "#005a9e")
+        self.assertEqual(figure.data[1].marker.color, "#8fd5a6")
+        self.assertEqual(figure.layout.title.text, "Net Price Benefit")
         self.assertIn("1\u202f100,00 €", figure.data[0].customdata[0])
         pd.testing.assert_frame_equal(frame, original)
 
     def test_savings_never_clips_negative_costs_or_missing_values(self):
-        for values in [(100, 90, 110), (-100, -90, -80), (100, None, 80)]:
+        for values in [(100, 90, 110), (-100, -90, -80), (None, 90, 80), (100, 90, None)]:
             with self.subTest(values=values):
                 frame = pd.DataFrame({"billing_month": ["2026-01"],
                                       "list_cost": [values[0]], "contracted_cost": [values[1]],
@@ -131,7 +173,23 @@ class DashboardPresentationTests(unittest.TestCase):
                 figure, stacked = savings_cost_chart(frame)
                 self.assertFalse(stacked)
                 self.assertEqual(figure.layout.barmode, "group")
-                self.assertEqual(figure.data[2].y[0], values[2])
+                self.assertEqual(len(figure.data), 2)
+                if values[2] is None:
+                    self.assertTrue(pd.isna(figure.data[0].y[0]))
+                    self.assertEqual(figure.data[0].customdata[0][0], "Unavailable")
+                else:
+                    self.assertEqual(figure.data[0].y[0], values[2])
+                if values[0] is None or values[2] is None:
+                    self.assertTrue(pd.isna(figure.data[1].y[0]))
+                else:
+                    self.assertEqual(figure.data[1].y[0], values[0] - values[2])
+
+    def test_savings_chart_does_not_require_contracted_cost(self):
+        figure, stacked = savings_cost_chart(pd.DataFrame({
+            "billing_month": ["2026-01"], "list_cost": [100], "effective_cost": [80],
+        }))
+        self.assertTrue(stacked)
+        self.assertEqual(len(figure.data), 2)
 
     def test_year_comparison_uses_only_common_months(self):
         frame = pd.DataFrame({
@@ -168,6 +226,9 @@ class DashboardPresentationTests(unittest.TestCase):
             "total_billed_cost": 912000, "resource_count": 22453,
             "negotiated_savings": 200000, "commitment_savings": -10765.8,
             "total_savings": 189234.2, "critical_completeness_rate": 100,
+            "reservation": 100000, "savings_plan": 100000,
+            "usage_on_demand": 901000, "usage_dynamic": 800, "adjustment": -44.25,
+            "other_effective_cost": 0,
             "batches": 1, "total_rows": 164145, "billed_cost_nulls": 0,
             "currency_nulls": 0, "service_nulls": 0,
             "billing_rows": 164145, "after_rows": 164145,
@@ -208,8 +269,31 @@ class DashboardPresentationTests(unittest.TestCase):
                             self.assertEqual(app.metric[3].value, "189\u202f234,20 €")
                             chart = json.loads(app.get("plotly_chart")[0].proto.spec)
                             self.assertEqual(chart["layout"]["barmode"], "stack")
-                            self.assertEqual(chart["data"][0]["name"], "Effective cost")
+                            self.assertEqual(chart["data"][0]["name"], "Effective Cost")
+                            self.assertEqual(len(chart["data"]), 2)
+                            self.assertEqual(app.subheader[0].value, "Detailed Table")
+                            self.assertEqual(list(app.dataframe[0].value.columns),
+                                             list(SAVINGS_DETAIL_COLUMNS.values()))
+                            self.assertFalse(any("diamond" in item.value for item in app.caption))
                             self.assertIn('"type":"category"', app.get("plotly_chart")[1].proto.spec)
+
+    def test_savings_page_stays_usable_before_datamart_refresh(self):
+        fixture = pd.DataFrame([{
+            "billing_month": "2026-01", "list_cost": 1300, "contracted_cost": 1000,
+            "effective_cost": 1100, "negotiated_savings": 300,
+            "commitment_savings": -100, "total_savings": 200, "savings_rate": 15.38,
+        }])
+        with (
+            patch.object(DatabricksDataSource, "healthcheck"),
+            patch.object(DatabricksDataSource, "query", side_effect=lambda _: fixture.copy()),
+            patch.object(st, "Page", CallablePage),
+            patch.object(st, "navigation",
+                         side_effect=lambda pages, **_: next(p for p in pages if p.title == "Savings")),
+        ):
+            app = AppTest.from_file(str(APP / "app.py"), default_timeout=30).run()
+            self.assertFalse(app.exception)
+            self.assertTrue(app.dataframe[0].value["Reservation"].isna().all())
+            self.assertTrue(any("Refresh dm_savings_monthly" in item.value for item in app.info))
 
     def test_annual_and_yoy_views_render_and_weight_rates(self):
         history = pd.DataFrame({

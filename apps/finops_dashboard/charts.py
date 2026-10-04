@@ -86,7 +86,7 @@ def cost_bridge(savings: pd.Series):
 def savings_cost_chart(frame: pd.DataFrame):
     """Stack effective cost and its list-price gap, never stack full cost bases."""
     costs = frame.sort_values("billing_month").copy()
-    bases = ["list_cost", "contracted_cost", "effective_cost"]
+    bases = ["list_cost", "effective_cost"]
     for column in bases:
         costs[column] = pd.to_numeric(costs[column], errors="coerce")
     costs["price_benefit"] = costs["list_cost"] - costs["effective_cost"]
@@ -98,40 +98,21 @@ def savings_cost_chart(frame: pd.DataFrame):
         and (costs["price_benefit"] >= 0).all()
     )
     figure = go.Figure()
-    if stacked:
-        for column, name, color in (
-            ("effective_cost", "Effective cost", "#005a9e"),
-            ("price_benefit", "Net price benefit", "#71afe5"),
-        ):
-            figure.add_trace(go.Bar(
-                x=costs["billing_month"], y=costs[column], name=name,
-                marker_color=color,
-                customdata=[[money(value)] for value in costs[column]],
-                hovertemplate=f"%{{x}}<br>{name}: %{{customdata[0]}}<extra></extra>",
-            ))
-        figure.add_trace(go.Scatter(
-            x=costs["billing_month"], y=costs["contracted_cost"],
-            mode="markers", name="Contracted price",
-            marker=dict(color="#242424", symbol="diamond", size=10),
-            customdata=[[money(value)] for value in costs["contracted_cost"]],
-            hovertemplate="%{x}<br>Contracted price: %{customdata[0]}<extra></extra>",
+    for column, name, color in (
+        ("effective_cost", "Effective Cost", "#005a9e"),
+        ("price_benefit", "Net Price Benefit", "#8fd5a6"),
+    ):
+        figure.add_trace(go.Bar(
+            x=costs["billing_month"], y=costs[column], name=name, marker_color=color,
+            customdata=[
+                [money(value) if pd.notna(value) else "Unavailable"]
+                for value in costs[column]
+            ],
+            hovertemplate=f"%{{x}}<br>{name}: %{{customdata[0]}}<extra></extra>",
         ))
-        figure.update_layout(barmode="stack", title="List price, effective cost and price benefit")
-    else:
-        for column, name, color in (
-            ("list_cost", "List price", "#71afe5"),
-            ("contracted_cost", "Contracted price", "#0078d4"),
-            ("effective_cost", "Effective cost", "#005a9e"),
-        ):
-            figure.add_trace(go.Bar(
-                x=costs["billing_month"], y=costs[column], name=name, marker_color=color,
-                customdata=[
-                    [money(value) if pd.notna(value) else "Unavailable"]
-                    for value in costs[column]
-                ],
-                hovertemplate=f"%{{x}}<br>{name}: %{{customdata[0]}}<extra></extra>",
-            ))
-        figure.update_layout(barmode="group", title="Cost bases by month (not additive)")
+    figure.update_layout(
+        barmode="stack" if stacked else "group", title="Net Price Benefit",
+    )
     figure.update_xaxes(title="Month", type="category")
     figure.update_yaxes(title="Cost (€)")
     return chart_layout(figure, 440), stacked

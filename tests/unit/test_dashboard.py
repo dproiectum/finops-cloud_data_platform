@@ -60,6 +60,17 @@ class DashboardTests(unittest.TestCase):
             self.assertIn(name, content)
         self.assertIn("List cost − Effective cost", content)
         self.assertIn("Month-over-month change", content)
+        self.assertIn("Effective cost breakdown", content)
+        self.assertIn("Reservation + Savings Plan + Usage On-Demand + Usage Dynamic + Adjustment", content)
+        self.assertNotIn("Commitment difference", content)
+
+    def test_savings_queries_allow_a_rolling_datamart_update(self):
+        config = DashboardConfig.from_environment()
+        sql = queries.monthly_savings(config)
+        self.assertIn("SELECT *, total_savings_vs_list AS total_savings", sql)
+        self.assertIn("`finops_prod`.`datamart`.`dm_savings_monthly`", sql)
+        self.assertNotIn("silver", sql)
+        self.assertNotIn("commitment_savings", queries.savings_summary(config, "2026-01"))
 
     def test_app_uses_managed_warehouse_resource_without_token(self):
         manifest = (APP / "app.yaml").read_text(encoding="utf-8")

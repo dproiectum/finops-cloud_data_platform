@@ -88,7 +88,7 @@ def savings_summary(config: DashboardConfig, month: str) -> str:
     value = _literal(month)
     return f"""
         SELECT list_cost, contracted_cost, effective_cost,
-               negotiated_savings, commitment_savings,
+               negotiated_savings,
                total_savings_vs_list AS total_savings, savings_rate
         FROM {config.datamart('dm_savings_monthly')}
         WHERE billing_month = '{value}'
@@ -96,10 +96,10 @@ def savings_summary(config: DashboardConfig, month: str) -> str:
 
 
 def monthly_savings(config: DashboardConfig) -> str:
+    # The app can deploy before the targeted datamart refresh: new component
+    # columns are returned when present, without failing against the old schema.
     return f"""
-        SELECT billing_month, list_cost, contracted_cost, effective_cost,
-               negotiated_savings, commitment_savings,
-               total_savings_vs_list AS total_savings, savings_rate
+        SELECT *, total_savings_vs_list AS total_savings
         FROM {config.datamart('dm_savings_monthly')}
         ORDER BY billing_month
     """

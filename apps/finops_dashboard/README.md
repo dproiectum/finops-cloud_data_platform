@@ -10,7 +10,7 @@ tables and the environment-aware `finops_ops.audit` history.
 - **Executive Overview**: monthly KPIs, month-over-month change and daily/monthly
   trends;
 - **Cost Drivers**: services, charge categories and portfolio SKU analysis;
-- **Savings**: list, contracted and effective cost comparisons;
+- **Savings**: net price benefit and an effective-cost breakdown by pricing type;
 - **Allocation & Accountability**: cost centers, services, subscriptions and
   application owners;
 - **Resources**: resources, regions and resource groups;
@@ -39,18 +39,96 @@ and a new revision is deployed.
   year against a partial year. The difference rate is computed from summed cost
   bases, not the average of monthly rates. Distinct monthly resource/service counts
   are not summed into annual distinct counts.
-- Savings stacks EffectiveCost (dark blue) and the net benefit relative to ListCost
-  (light blue). Their total equals ListCost. ContractedCost is a diamond marker,
-  not a third stacked amount. If any displayed cost basis is negative, missing,
-  or EffectiveCost exceeds ListCost, the view uses grouped cost-basis bars instead
-  of clipping values into positive savings. A separate monthly net-benefit series
-  and the underlying table remain available. These synthetic comparisons do not
-  establish realized organizational savings.
+- Savings stacks Effective Cost (dark blue) and Net Price Benefit (light green).
+  Their total equals List Cost. There is no Contract Cost marker or third series.
+  If a list/effective cost is negative or missing, or Effective Cost exceeds List
+  Cost, the same two series use grouped bars; negative values are never clipped.
+  The title is **Net Price Benefit**, not **Realized Savings**: these synthetic
+  cost comparisons do not establish realized organizational or cash savings.
+- **Detailed Table** uses business labels in this order: Billing Month, List Cost,
+  Contract Cost, Negotiated Savings, Reservation, Savings Plan, Usage On-Demand,
+  Usage Dynamic, Adjustment, Effective Cost, Saving Rate. Commitment Savings is
+  no longer displayed. Reservation and Savings Plan are sums of source
+  `EffectiveCost` on the corresponding commitment-based Usage rows, not full
+  upfront purchase prices. Other Charges appears before Effective Cost only
+  when remaining charge types contribute a non-zero net amount.
 - Service charts aggregate by service name before applying their top-N limit.
   Each name has one blue bar, with no service-category legend. Allocation provides
   highest-cost-first, lowest-cost-first and alphabetical order for the displayed
   top 30 services. Cost Drivers shows the top 20 and explains charge categories;
   negative charges remain visible to the left of zero.
+
+## One-time Savings datamart update
+
+The five effective-cost components require the updated canonical SQL template:
+`platform/common/sql/datamarts/table_refresh/08_dm_savings_monthly.sql`.
+The standard datamart refresh already executes this template for DEV and PROD;
+no new pipeline task or duplicate setup script is required. Classic compute and
+serverless use the same template.
+
+After the GitHub push and Databricks Git Folder pull, **manually** refresh just
+this derived table for the dashboard. Attach a Python notebook to your usual
+Unity Catalog-compatible compute in the Belgium workspace, restart its Python
+session if it imported an older package, then run:
+
+```python
+import sys
+from pathlib import Path
+
+project_root = Path("/Workspace/Users/thailongdam@gmail.com/finops-cloud_data_platform")
+assert (project_root / "src/finops_cloud").is_dir(), "Check the Git Folder path"
+sys.path.insert(0, str(project_root / "src"))
+
+from finops_cloud.config import load_config
+from finops_cloud.sql.runner import execute_sql_file, table_context
+
+config = load_config("prod", project_root)
+execute_sql_file(
+    spark,
+    "datamarts/table_refresh/08_dm_savings_monthly.sql",
+    table_context(config),
+)
+
+display(spark.sql("""
+    SELECT billing_month, reservation, savings_plan, usage_on_demand,
+           usage_dynamic, adjustment, other_effective_cost, effective_cost,
+           effective_cost - (
+               reservation + savings_plan + usage_on_demand + usage_dynamic
+               + adjustment + other_effective_cost
+           ) AS breakdown_difference
+    FROM finops_prod.datamart.dm_savings_monthly
+    ORDER BY billing_month
+"""))
+spark.sql("""
+    SELECT assert_true(count(*) > 0, 'No monthly savings rows'),
+           assert_true(
+               coalesce(max(abs(effective_cost - (
+                   reservation + savings_plan + usage_on_demand + usage_dynamic
+                   + adjustment + other_effective_cost
+               ))), 0) < 0.01,
+               'Effective-cost breakdown does not reconcile'
+           )
+    FROM finops_prod.datamart.dm_savings_monthly
+""").collect()
+```
+
+This replaces only `finops_prod.datamart.dm_savings_monthly` using existing
+Silver rows; it does not reload sources, reset catalogs, change GCS files or
+rerun ingestion. Use `dev` instead of `prod` and adjust the control query catalog
+if you also want to update DEV. Standard future pipeline runs retain these
+columns automatically through the shared template.
+
+Before the refresh, the dashboard remains usable with the previous datamart
+schema. Missing components show **—**, not fabricated zeroes, and an information
+message explains the required refresh. After execution, allow up to five minutes
+for the dashboard query cache to expire, then reload the Savings page.
+
+The Knowledge Base documents both `SUM(EffectiveCost)` and the equivalent
+component sum. This is a presentation breakdown of existing effective costs,
+not a new amortization calculation. The generator preserves/scales the source
+cost columns rather than deriving EffectiveCost from ContractedCost.
+
+Source: https://focus.finops.org/docs/specification/v1-0/columns/cost-and-usage/effective-cost/.
 
 ## Security boundary
 
@@ -107,14 +185,14 @@ from the service region. This was read from the live configuration on 4 October
 branch can initiate deployment. The inspected service has invoker IAM checking
 disabled; this is not evidence of IAP or user-level scope protection.
 
-After review, publish only the dashboard changes from the Cloud platform repo:
+After review, publish only the related changes from the Cloud platform repo:
 
 ```bash
 cd "/Users/dtl/Desktop/PFE/FinOps Cloud Data Platform"
-git add -- apps/finops_dashboard/app.py apps/finops_dashboard/charts.py apps/finops_dashboard/formatting.py apps/finops_dashboard/queries.py apps/finops_dashboard/README.md tests/unit/test_dashboard.py tests/unit/test_dashboard_presentation.py
+git add -- apps/finops_dashboard/app.py apps/finops_dashboard/charts.py apps/finops_dashboard/formatting.py apps/finops_dashboard/queries.py apps/finops_dashboard/knowledge.py apps/finops_dashboard/README.md platform/common/sql/datamarts/table_refresh/08_dm_savings_monthly.sql tests/unit/test_dashboard.py tests/unit/test_dashboard_presentation.py tests/unit/test_sql_model.py
 git diff --cached --check
 git diff --cached --stat
-git commit -m "Improve cloud dashboard navigation, cost charts and yearly views"
+git commit -m "Clarify Savings dashboard and expose effective cost components"
 git push origin main
 ```
 
@@ -129,8 +207,9 @@ The push triggers a new build and deployment, which can incur GCP charges.
 3. Reload the dashboard. Verify European metrics/table/hover formats, the top
    navigation, sorting, Savings and both annual views. Preserve a C5 screenshot
    only after this verification.
-4. No Databricks ingestion pipeline or table-creation SQL needs to run for these
-   presentation changes. Keep the existing credentials and SQL Warehouse config.
+4. Run only the targeted Savings datamart refresh above to populate its new
+   components. No ingestion pipeline or catalog-creation SQL needs to run.
+   Keep the existing credentials and SQL Warehouse config.
 
 If the trigger did not run, the operator can launch it manually:
 
