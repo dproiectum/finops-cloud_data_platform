@@ -27,12 +27,18 @@ datamart = "datamart"
 catalog = "finops_ops"
 schema = "audit"
 
+[cost_allocation]
+# Synthetic fallback policy: preserve source cost centers, then allocate by Region.
+# Only explicitly approved region names may be added here; Global is always Corporate.
+corporate_regions = []
+
 [tables]
 bronze_daily = "focus_daily_raw"
 bronze_billing = "focus_billing_raw"
 silver_canonical = "focus_cost_usage"
 silver_central = "focus_cost_usage_central"
 fact_cost_usage = "fact_finops_cost_usage"
+cost_allocation_view = "v_cost_allocation"
 dim_date = "dim_date"
 dim_billing_scope = "dim_billing_scope"
 dim_service = "dim_service"

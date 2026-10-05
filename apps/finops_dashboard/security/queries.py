@@ -137,10 +137,17 @@ class ScopedQueries:
         return self._grouped(config, "service_name", month, limit)
 
     def cost_centers(self, config, month, limit=20):
-        return self._grouped(config, "cost_center", month, limit)
+        return self._query(config, f""", labeled AS (
+            SELECT CASE WHEN cost_center IS NULL OR lower(trim(cost_center))
+              IN ('', 'unknown', 'unallocated', 'unallocated costs', 'no cost center assigned')
+              THEN 'Unallocated Costs' ELSE trim(cost_center) END AS cost_center,
+              billed_cost FROM authorized_rows WHERE billing_month = :billing_month
+        ) SELECT cost_center, SUM(billed_cost) AS total_billed_cost FROM labeled
+          GROUP BY cost_center ORDER BY total_billed_cost DESC
+          LIMIT {self._limit(limit)}""", month)
 
     def charge_types(self, config, month):
-        return self._grouped(config, "charge_category, charge_subcategory, charge_frequency", month)
+        return self._grouped(config, "charge_category, charge_frequency", month)
 
     def resources(self, config, month, limit=25):
         return self._grouped(config, "resource_group_name, resource_name, region", month, limit)

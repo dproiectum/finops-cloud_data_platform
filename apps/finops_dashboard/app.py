@@ -473,7 +473,9 @@ def allocation_page(month: str) -> None:
 
     center_cost = pd.to_numeric(centers["total_billed_cost"], errors="coerce")
     allocated = center_cost[
-        ~centers["cost_center"].fillna("").str.lower().isin({"", "unknown", "unallocated"})
+        ~centers["cost_center"].fillna("").str.strip().str.lower().isin(
+            {"", "unknown", "unallocated", "unallocated costs", "no cost center assigned"}
+        )
     ].sum()
     total = center_cost.sum()
     coverage = 0 if total == 0 else 100 * float(allocated) / abs(float(total))
@@ -494,6 +496,14 @@ def allocation_page(month: str) -> None:
                         width="stretch")
         st.caption("One color and one bar per service; this view shows the top 30 services by cost.")
     with center_tab:
+        st.caption(
+            "Synthetic allocation policy: source cost centers take priority. For missing values, "
+            "West Europe, North Europe, France Central, Sweden Central and UK South are assigned to Europe; "
+            "Global and explicitly approved headquarters regions are assigned to Corporate. "
+            "Remaining costs are Unallocated Costs. Region-based assignments are simulated business rules, "
+            "not ownership information supplied by Azure. Coverage includes these fallback assignments, "
+            "not just source metadata. This chart uses Billed Cost."
+        )
         if (center_cost < 0).any() or not (center_cost > 0).any():
             # A scoped perimeter can have net credits. Treemap areas cannot
             # represent negative values; retain them as signed bars instead.

@@ -12,7 +12,7 @@ CLASSIC_NOTEBOOKS = ROOT / "platform/classic_compute/notebooks"
 class NotebookTests(unittest.TestCase):
     def test_notebooks_are_clean_valid_and_platform_scoped(self):
         notebooks = sorted((ROOT / "platform").rglob("*.ipynb"))
-        self.assertEqual(len(notebooks), 8)
+        self.assertEqual(len(notebooks), 10)
         self.assertFalse((ROOT / "notebooks").exists())
         for path in notebooks:
             notebook = json.loads(path.read_text(encoding="utf-8"))
@@ -54,6 +54,13 @@ class NotebookTests(unittest.TestCase):
         for name, import_line in expected.items():
             content = (COMMON_NOTEBOOKS / name).read_text(encoding="utf-8")
             self.assertIn(import_line, content)
+
+    def test_allocation_notebook_is_manual_and_calls_shared_policy(self):
+        content = (COMMON_NOTEBOOKS / 'operations/apply_cost_center_allocation.ipynb').read_text(encoding='utf-8')
+        self.assertIn('APPLY_COST_CENTER_ALLOCATION', content)
+        self.assertIn('finops_cloud.medallion.cost_allocation import apply_cost_allocation', content)
+        self.assertIn('share_of_month_percent', content)
+        self.assertNotIn('refresh_gold_for_month', content)
 
     def test_classic_validation_notebook_forces_common_sql_assertions(self):
         content = (

@@ -1,5 +1,6 @@
 -- Manual STEP 7 setup, workspace-belgium, PROD synthetic dataset.
 -- Execute with the existing view owner's business-data read permissions.
+-- Create Gold v_cost_allocation with the manual allocation notebook first.
 -- This ordinary view stores no duplicate data and follows Silver publications.
 -- It is NOT a Unity Catalog row-filter policy. The backend can read all rows;
 -- the protected application must apply its live viewer predicate before aggregation.
@@ -8,7 +9,7 @@
 CREATE OR REPLACE VIEW finops_prod.datamart.v_dashboard_charge_scoped AS
 WITH tagged AS (
     SELECT *, from_json(Tags, 'MAP<STRING,STRING>') AS application_tags
-    FROM finops_prod.silver.focus_cost_usage_central
+    FROM finops_prod.gold.v_cost_allocation
 )
 SELECT
     'prod' AS environment,
@@ -17,16 +18,18 @@ SELECT
     ResourceId AS resource_id,
     coalesce(nullif(trim(ResourceName), ''), 'Unknown') AS resource_name,
     coalesce(nullif(trim(x_ResourceGroupName), ''), 'Unknown') AS resource_group_name,
-    RegionName AS region,
+    Region AS region,
     ServiceName AS service_name,
-    coalesce(nullif(trim(x_CostCenter), ''), 'Unallocated') AS cost_center,
+    cost_center_allocated AS cost_center,
+    cost_center_source,
+    allocation_method,
+    allocation_policy_version,
     coalesce(nullif(trim(SubAccountId), ''), 'Unknown') AS subscription_id,
     coalesce(nullif(trim(SubAccountName), ''), 'Unknown') AS subscription_name,
     SkuId AS sku_id,
     x_SkuMeterCategory AS meter_category,
     x_SkuMeterName AS meter_name,
     ChargeCategory AS charge_category,
-    ChargeSubcategory AS charge_subcategory,
     ChargeFrequency AS charge_frequency,
     nullif(trim(element_at(application_tags, 'ApplicationCode-Symphony')), '')
         AS application_code,

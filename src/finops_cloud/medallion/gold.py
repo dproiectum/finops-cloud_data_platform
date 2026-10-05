@@ -10,6 +10,7 @@ from finops_cloud.sql.runner import execute_sql_file, table_context
 
 # Python orchestrates execution; SQL remains the source of truth for warehouse logic.
 GOLD_DDL = "gold/table_creation/00_create_gold_tables.sql"
+COST_ALLOCATION_DDL = "gold/table_creation/01_create_cost_allocation_view.sql"
 GOLD_LOAD_SCRIPTS = (
     "gold/data_loading/10_merge_dimensions.sql",
     "gold/data_loading/20_merge_tags.sql",
@@ -53,9 +54,34 @@ def ensure_gold_tables(spark, config) -> None:
 def refresh_datamarts(spark, config) -> None:
     """Rebuild all certified datamart tables from Silver and Gold sources."""
     context = table_context(config)
+    refresh_cost_allocation_view(spark, config)
     # Numeric filenames make execution order explicit and reproducible.
     for relative_path in DATAMART_SCRIPTS:
         execute_sql_file(spark, relative_path, context)
+
+
+def cost_allocation_context(config) -> dict[str, str]:
+    """Validate the explicit Corporate region allowlist before rendering SQL."""
+    regions = config.corporate_regions
+    if not isinstance(regions, tuple) or any(
+        not isinstance(region, str) or not region.strip() for region in regions
+    ):
+        raise ValueError("corporate_regions must contain non-empty region names")
+    normalized = tuple(region.strip().lower() for region in regions)
+    if any(not re.fullmatch(r'[a-z0-9][a-z0-9 _-]*', region) for region in normalized):
+        raise ValueError("corporate_regions must use plain Azure region names")
+    reserved = {'west europe', 'north europe', 'france central', 'sweden central',
+                'uk south', 'global'}
+    if len(set(normalized)) != len(normalized) or reserved.intersection(normalized):
+        raise ValueError("corporate_regions must be unique and exclude Europe/Global defaults")
+    # An empty allowlist matches nothing, including rows with a missing Region.
+    region_sql = ', '.join("'" + region.replace("'", "''") + "'" for region in normalized)
+    return {**table_context(config), 'corporate_regions_sql': region_sql or 'NULL'}
+
+
+def refresh_cost_allocation_view(spark, config) -> None:
+    """Publish the shared line-level allocation policy for marts and serving."""
+    execute_sql_file(spark, COST_ALLOCATION_DDL, cost_allocation_context(config))
 
 
 def refresh_gold_for_month(spark, config, month_frame, month: str) -> None:

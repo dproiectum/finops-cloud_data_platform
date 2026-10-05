@@ -1,4 +1,5 @@
 import os
+import sqlite3
 from pathlib import Path
 import sys
 import unittest
@@ -46,6 +47,31 @@ class DashboardTests(unittest.TestCase):
         self.assertNotIn("GROUP BY service_category", sql)
         self.assertIn("SUM(total_billed_cost)", sql)
         self.assertIn("LIMIT 30", sql)
+
+    def test_cost_centers_normalize_missing_labels_without_losing_signed_costs(self):
+        config = DashboardConfig.from_environment()
+        sql = queries.cost_centers(config, '2026-06').replace(
+            config.datamart('dm_cost_by_scope_service_month'), 'source'
+        )
+        with sqlite3.connect(':memory:') as connection:
+            connection.execute('CREATE TABLE source (billing_month TEXT, cost_center TEXT, total_billed_cost REAL)')
+            connection.executemany('INSERT INTO source VALUES (?,?,?)', [
+                ('2026-06', None, 100), ('2026-06', '', 20),
+                ('2026-06', ' Unknown ', -5), ('2026-06', 'Unallocated', 2),
+                ('2026-06', 'No Cost Center Assigned', 3),
+                ('2026-06', 'CostCenter_APAC', 40), ('2026-05', None, 999),
+            ])
+            self.assertEqual(connection.execute(sql).fetchall(), [
+                ('Unallocated Costs', 120), ('CostCenter_APAC', 40),
+            ])
+
+    def test_charge_queries_do_not_require_an_invented_attribute(self):
+        sql = queries.charge_types(DashboardConfig.from_environment(), '2026-06')
+        self.assertNotIn('charge_subcategory', sql)
+        self.assertIn('charge_category, charge_frequency', sql)
+        knowledge = (APP / 'knowledge.py').read_text(encoding='utf-8')
+        self.assertIn('Unallocated Costs', knowledge)
+        self.assertIn('not a Reservation/Savings Plan indicator', knowledge)
 
     def test_knowledge_pages_keep_columns_and_formulas(self):
         content = (APP / "knowledge.py").read_text(encoding="utf-8")

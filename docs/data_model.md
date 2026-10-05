@@ -69,6 +69,27 @@ erDiagram
 Dimension keys are deterministic SHA-256 strings. This portable design avoids
 environment-specific sequences.
 
+`dim_charge_type` exposes only category and frequency. The source has no charge
+subcategory, so the former constant attribute is removed. Dimension and fact
+loaders keep the legacy hash token solely to preserve existing foreign keys;
+it is not a business column. Existing tables require the guarded manual notebook
+`platform/common/notebooks/operations/remove_charge_subcategory.ipynb`, described
+in `platform/common/sql/gold/README.md`. No fact or upstream reload is required.
+
+The Gold logical view `v_cost_allocation` preserves each central Silver charge
+and its original `x_CostCenter` as `cost_center_source`. A usable source value
+takes priority; otherwise the synthetic `REGION_FALLBACK_V1` policy allocates the
+five approved European regions to `CostCenter_Europe`, Global and any explicitly
+approved headquarters regions to `CostCenter_Corporate`, and remaining cases to
+`Unallocated Costs`. The Corporate region allowlist is initially empty.
+`cost_center_allocated`, `allocation_method` and `allocation_policy_version`
+trace this enrichment. No Parquet, Bronze, Silver, fact or dimension value is
+rewritten. Regional fallbacks are simulated business ownership, not facts inferred
+from Azure hosting geography. Datamart 03 and the protected serving view use
+the same line-level Gold view, never `dim_billing_scope.cost_center` for this policy.
+This avoids the Type-1 dimension assigning one center to several charge regions.
+See `platform/common/sql/gold/README.md` for manual DEV/PROD application.
+
 `dim_billing_scope` and `dim_resource` currently use Type 1 handling: `MERGE`
 updates current attributes. Validity columns remain for model compatibility and
 a future SCD2 evolution, but this version does not claim to preserve every
@@ -85,7 +106,7 @@ fields will require an explicit SQL migration.
 |---|---|
 | `dm_monthly_billing` | Monthly billed cost |
 | `dm_daily_billing` | Daily trend |
-| `dm_cost_by_scope_service_month` | Cost by scope and service |
+| `dm_cost_by_scope_service_month` | Line-level allocated Cost Center, customer and service |
 | `dm_top_services` | Most expensive services |
 | `dm_top_resources` | Most expensive resources |
 | `dm_cost_by_charge_type` | Charge-category analysis |
@@ -100,7 +121,8 @@ fields will require an explicit SQL migration.
 
 Datamarts 8, 9, and 11 read the central Silver table directly because they use
 FOCUS fields and technical metadata that are not all present in the fact table.
-The other datamarts use the Gold model.
+Datamart 3 reads the Gold allocation view over central Silver. The remaining
+datamarts use the physical Gold model.
 
 ## Execution order
 
@@ -108,7 +130,8 @@ The other datamarts use the Gold model.
 2. `10_merge_dimensions.sql` loads dimensions.
 3. `20_merge_tags.sql` normalizes tags and loads the bridge table.
 4. `30_replace_fact_month.sql` replaces the month in the fact table.
-5. Scripts `01` through `14` recreate datamarts from certified tables.
+5. `01_create_cost_allocation_view.sql` publishes the shared allocation policy.
+6. Scripts `01` through `14` recreate datamarts from certified tables/views.
 
 The first version deliberately performs a full datamart refresh for simplicity
 and reproducibility. Month-level optimization can follow measurements in

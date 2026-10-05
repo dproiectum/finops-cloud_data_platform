@@ -118,7 +118,6 @@ CREATE TABLE IF NOT EXISTS {dim_pricing} (
 CREATE TABLE IF NOT EXISTS {dim_charge_type} (
   charge_type_sk STRING NOT NULL,
   charge_category STRING,
-  charge_subcategory STRING,
   charge_frequency STRING
 ) USING DELTA;
 

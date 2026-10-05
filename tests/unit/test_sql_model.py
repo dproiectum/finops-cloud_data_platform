@@ -1,4 +1,6 @@
 from pathlib import Path
+import hashlib
+import re
 import sqlite3
 import sys
 import tomllib
@@ -86,6 +88,31 @@ class SqlModelTests(unittest.TestCase):
         fact_load = sql_text("gold/data_loading/30_replace_fact_month.sql")
         self.assertIn("REPLACE WHERE billing_month = '{billing_month}'", fact_load)
 
+    def test_charge_dimension_removes_attribute_without_changing_legacy_keys(self):
+        ddl = sql_text(GOLD_DDL)
+        load = sql_text('gold/data_loading/10_merge_dimensions.sql')
+        charge_sql = load.split('MERGE INTO {dim_charge_type} AS target', 1)[1]
+        projection = charge_sql.split('USING (', 1)[1].split(') AS source', 1)[0]
+        for sql in (ddl, load, sql_text('datamarts/table_refresh/06_dm_cost_by_charge_type.sql')):
+            self.assertNotIn('charge_subcategory', sql)
+        connection = sqlite3.connect(':memory:')
+        self.addCleanup(connection.close)
+        connection.create_function('concat_ws', -1, lambda separator, *values:
+                                   separator.join(str(value) for value in values if value is not None))
+        connection.create_function('sha2', 2, lambda value, bits:
+                                   hashlib.sha256(value.encode()).hexdigest())
+        connection.execute('CREATE TABLE source (ChargeCategory TEXT, ChargeFrequency TEXT)')
+        connection.executemany('INSERT INTO source VALUES (?,?)', [
+            ('Usage', 'Usage-Based'), ('Usage', 'Usage-Based'), ('Adjustment', None),
+        ])
+        rows = connection.execute(projection.replace('{source_month}', 'source')).fetchall()
+        self.assertEqual(set(rows), {
+            (hashlib.sha256(b'charge_type||Usage||Unknown||Usage-Based').hexdigest(), 'Usage', 'Usage-Based'),
+            (hashlib.sha256(b'charge_type||Adjustment||Unknown||Unknown').hexdigest(), 'Adjustment', 'Unknown'),
+        })
+        fact_sql = sql_text('gold/data_loading/30_replace_fact_month.sql')
+        self.assertIn("'charge_type', n_charge_category, 'Unknown',", fact_sql)
+
     def test_security_metadata_setup_matches_manual_tables(self):
         ddl = sql_text("security/01_create_security_tables.sql")
         self.assertEqual(len(split_statements(ddl)), 3)
@@ -147,10 +174,31 @@ class SqlModelTests(unittest.TestCase):
         self.assertIn("ApplicationCode-Symphony", view)
         validation = sql_text("security/05_validate_dashboard_serving_view.sql")
         self.assertIn("source.contracted = serving.contracted", validation)
+        self.assertIn("allocation differs from the shared Gold policy", validation)
+        self.assertIn("public and protected allocation totals differ", validation)
         self.assertIn("test application enforcement separately", validation)
         for relative_path in ("controls/01_validate_empty_platform.sql",
                               "controls/03_validate_prod_ready.sql"):
             self.assertIn("table_type <> 'VIEW'", sql_text(relative_path))
+
+    def test_serving_source_columns_are_declared_by_the_silver_contract(self):
+        contract_path = ROOT / "contracts/focus_cost_usage/v1.0.0/focus_cost_usage_contract.yaml"
+        # Extract the contract's simple, unquoted field declarations without
+        # adding a YAML dependency to this standard-library test module.
+        fields = contract_path.read_text(encoding="utf-8").split("\nfields:\n", 1)[1]
+        declared = set(re.findall(r"^  - name: ([A-Za-z_][A-Za-z0-9_]*)\s*$",
+                                  fields, re.MULTILINE))
+        self.assertIn("ChargeCategory", declared)
+        view = sql_text("security/04_create_dashboard_serving_view.sql")
+        executable = re.sub(r"--[^\n]*", "", view)
+        executable = re.sub(r"'(?:''|[^'])*'", "''", executable)
+        # FOCUS and Azure-extension source columns use these naming conventions.
+        referenced = set(re.findall(r"\b(?:[A-Z][a-z][A-Za-z0-9_]*|x_[A-Z][A-Za-z0-9_]*)\b",
+                                    executable))
+        self.assertTrue(referenced)
+        self.assertEqual(referenced - declared, set())
+        self.assertNotIn("ChargeSubcategory", declared)
+        self.assertNotIn("charge_subcategory", view)
 
     def test_all_datamarts_are_rebuilt_instead_of_appended(self):
         for relative_path in DATAMART_SCRIPTS:

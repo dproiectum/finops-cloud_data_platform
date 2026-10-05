@@ -121,11 +121,19 @@ def services(config: DashboardConfig, month: str, limit: int = 15) -> str:
 def cost_centers(config: DashboardConfig, month: str, limit: int = 20) -> str:
     value = _literal(month)
     return f"""
-        SELECT coalesce(cost_center, 'Unallocated') AS cost_center,
+        WITH labeled AS (
+            SELECT CASE WHEN cost_center IS NULL OR lower(trim(cost_center))
+                     IN ('', 'unknown', 'unallocated', 'unallocated costs', 'no cost center assigned')
+                     THEN 'Unallocated Costs' ELSE trim(cost_center) END
+                     AS normalized_cost_center,
+                   total_billed_cost
+            FROM {config.datamart('dm_cost_by_scope_service_month')}
+            WHERE billing_month = '{value}'
+        )
+        SELECT normalized_cost_center AS cost_center,
                SUM(total_billed_cost) AS total_billed_cost
-        FROM {config.datamart('dm_cost_by_scope_service_month')}
-        WHERE billing_month = '{value}'
-        GROUP BY cost_center
+        FROM labeled
+        GROUP BY normalized_cost_center
         ORDER BY total_billed_cost DESC
         LIMIT {int(limit)}
     """
@@ -134,7 +142,7 @@ def cost_centers(config: DashboardConfig, month: str, limit: int = 20) -> str:
 def charge_types(config: DashboardConfig, month: str) -> str:
     value = _literal(month)
     return f"""
-        SELECT charge_category, charge_subcategory, charge_frequency,
+        SELECT charge_category, charge_frequency,
                total_billed_cost
         FROM {config.datamart('dm_cost_by_charge_type')}
         WHERE billing_month = '{value}'

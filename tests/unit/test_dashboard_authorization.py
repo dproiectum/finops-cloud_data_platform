@@ -54,7 +54,7 @@ class FixtureSource:
               resource_name TEXT, resource_group_name TEXT, region TEXT, service_name TEXT,
               cost_center TEXT, subscription_id TEXT, subscription_name TEXT, sku_id TEXT,
               meter_category TEXT, meter_name TEXT, charge_category TEXT,
-              charge_subcategory TEXT, charge_frequency TEXT, application_code TEXT,
+              charge_frequency TEXT, application_code TEXT,
               application_name TEXT, application_owner_id TEXT, application_owner_email TEXT,
               application_business_owner TEXT, billed_cost REAL, effective_cost REAL,
               list_cost REAL, contracted_cost REAL, effective_cost_component TEXT,
@@ -104,7 +104,7 @@ class FixtureSource:
         values = (
             env, month, month + "-01", f"{app}-resource", f"{app}-name", f"{app}-group",
             "test-region", f"{app}-service", f"{app}-center", f"{app}-sub", f"{app}-subscription",
-            f"{app}-sku", "Compute", f"{app}-meter", "Usage", "test", "Usage-Based",
+            f"{app}-sku", "Compute", f"{app}-meter", "Usage", "Usage-Based",
             app, f"{app}-application", f"{app}-owner", "example@example.invalid", "test",
             billed, effective, list_cost, contracted, component, "USD", "test-ingestion",
             "2026-03-01 00:00:00",
@@ -120,6 +120,7 @@ class FixtureSource:
             "finops_ops.security.business_scope": "business_scope",
             "finops_prod.datamart.v_dashboard_charge_scoped": "charges",
             "finops_prod.silver.focus_cost_usage_central": "raw_source",
+            "finops_prod.gold.v_cost_allocation": "allocated_source",
             "finops_ops.audit.pipeline_run": "pipeline_run",
             "finops_ops.audit.monthly_reconciliation": "monthly_reconciliation",
         }
@@ -187,6 +188,19 @@ class AuthorizationTests(unittest.TestCase):
             "reservation", "savings_plan", "usage_on_demand", "usage_dynamic", "adjustment",
             "other_effective_cost",
         )), row["effective_cost"])
+
+    def test_missing_cost_center_labels_merge_only_within_authorized_rows(self):
+        self.source.connection.execute("UPDATE charges SET cost_center='Unknown' "
+                                       "WHERE application_code='APP00013057' AND billed_cost=100")
+        self.source.connection.execute("UPDATE charges SET cost_center=NULL "
+                                       "WHERE application_code='APP00013057' AND billed_cost=50")
+        owner = self.queries('demo-app-owner-a')
+        frame = self.source.run(owner.cost_centers(self.config, '2026-01'))
+        self.assertEqual(frame[['cost_center', 'total_billed_cost']].values.tolist(),
+                         [['Unallocated Costs', 150]])
+        charges = self.source.run(owner.charge_types(self.config, '2026-01'))
+        self.assertNotIn('charge_subcategory', charges.columns)
+        self.assertEqual(charges['total_billed_cost'].sum(), 150)
 
     def test_every_business_query_uses_scoped_rows_and_executes(self):
         query = self.queries("demo-app-owner-a")
@@ -420,10 +434,10 @@ class ServingViewTests(unittest.TestCase):
             connection.create_function("to_date", 1, lambda value: value[:10] if value else None)
             connection.execute("""CREATE TABLE raw_source (
               Tags TEXT, billing_month TEXT, ChargePeriodStart TEXT, ResourceId TEXT,
-              ResourceName TEXT, x_ResourceGroupName TEXT, RegionName TEXT, ServiceName TEXT,
+              ResourceName TEXT, x_ResourceGroupName TEXT, Region TEXT, ServiceName TEXT,
               x_CostCenter TEXT, SubAccountId TEXT, SubAccountName TEXT, SkuId TEXT,
               x_SkuMeterCategory TEXT, x_SkuMeterName TEXT, ChargeCategory TEXT,
-              ChargeSubcategory TEXT, ChargeFrequency TEXT, BilledCost REAL,
+              ChargeFrequency TEXT, BilledCost REAL,
               EffectiveCost REAL, ListCost REAL, ContractedCost REAL, BillingCurrency TEXT,
               _ingestion_run_id TEXT, _ingested_at TEXT, PricingCategory TEXT,
               CommitmentDiscountType TEXT
@@ -438,6 +452,16 @@ class ServingViewTests(unittest.TestCase):
                    ListCost,ContractedCost,ChargeCategory,PricingCategory,CommitmentDiscountType)
                   VALUES (?, '2026-01','2026-01-01','r',?,?,120,110,?,'On-Demand',NULL)
                 """, (tag, billed, effective, component))
+            connection.execute("UPDATE raw_source SET Region='West Europe' WHERE BilledCost=100")
+            connection.execute("UPDATE raw_source SET Region='Global' WHERE BilledCost=-30")
+            from finops_cloud.config import load_config
+            from finops_cloud.medallion.gold import COST_ALLOCATION_DDL, cost_allocation_context
+            from finops_cloud.sql.runner import render_sql
+            allocation = render_sql(COST_ALLOCATION_DDL, {
+                **cost_allocation_context(load_config('prod', ROOT)),
+                'silver_central': 'raw_source', 'cost_allocation_view': 'allocated_source',
+            }).replace('CREATE OR REPLACE VIEW', 'CREATE VIEW')
+            connection.executescript(allocation)
             connection.executescript(text)
             result = connection.execute("SELECT COUNT(*),SUM(billed_cost),SUM(effective_cost),"
                                         "SUM(list_cost),SUM(contracted_cost) FROM charges").fetchone()
@@ -448,6 +472,16 @@ class ServingViewTests(unittest.TestCase):
                                                 "WHERE application_code IS NULL").fetchone()[0], 2)
             self.assertEqual(connection.execute("SELECT effective_cost_component FROM charges "
                                                 "WHERE billed_cost=-30").fetchone()[0], "adjustment")
+            self.assertNotIn("charge_subcategory", {
+                row[1] for row in connection.execute("PRAGMA table_info(charges)")
+            })
+            self.assertEqual(connection.execute("SELECT billed_cost,cost_center,allocation_method "
+                                                "FROM charges ORDER BY billed_cost").fetchall(),
+                             [(-30, 'CostCenter_Corporate', 'GLOBAL_CORPORATE'),
+                              (7, 'Unallocated Costs', 'UNALLOCATED'),
+                              (100, 'CostCenter_Europe', 'REGION_EUROPE')])
+            self.assertEqual(connection.execute("SELECT COUNT(*) FROM charges "
+                                                "WHERE cost_center_source IS NOT NULL").fetchone(), (0,))
 
 
 class ProtectedDashboardTests(unittest.TestCase):

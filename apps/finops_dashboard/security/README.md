@@ -35,6 +35,9 @@ People who already have direct Databricks access retain their separate UC rights
 In SQL Editor of workspace-belgium, using the existing Warehouse
 `137166118b7adca0`, execute these files in order and stop on any error:
 
+Prerequisite: run the manual `apply_cost_center_allocation.ipynb` notebook in DEV
+then PROD to create Gold `v_cost_allocation`, following the Gold README.
+
 1. `platform/common/sql/security/04_create_dashboard_serving_view.sql`.
 2. `platform/common/sql/security/05_validate_dashboard_serving_view.sql`.
 
@@ -45,9 +48,11 @@ ordinary view without another pipeline task. Run setup only after normal PROD
 initialization and loading. Recreate the view if the whole catalog is reset.
 The 30-business-table inventory controls now exclude views from their counts.
 
-Create it as the existing owner/admin who can read PROD Silver. For the SQL
+Create it as the existing owner/admin who can read the Gold allocation view
+and PROD Silver. For the SQL
 Warehouse backend, view consumers need SELECT on the view while the view owner
-must retain permissions on its Silver source. The existing dashboard service
+must retain permissions on its Gold view and the allocation view owner on Silver.
+The existing dashboard service
 principal's SELECT grant on `finops_prod.datamart` covers this view too; do not
 grant that principal SELECT on all Silver tables just to run these tests.
 The local tests below instead use your own interactive Databricks profile.
@@ -65,6 +70,15 @@ Unlike Gold's latest resource attributes, it does not retroactively transfer
 historical untagged charges to the resource's latest application. Null/unknown
 applications are visible to a global FinOps administrator, not restricted viewers.
 Other labels also come from charge-grain Silver rather than latest Gold dimensions.
+The source has no `ChargeSubcategory`; the serving view and dashboard do not
+invent that attribute or rename a pricing subcategory into it. Migrate existing
+Gold/datamart structures with the manual notebook described in
+`platform/common/sql/gold/README.md` before running the updated loading SQL.
+Source cost centers take priority. Missing centers follow the shared synthetic
+Europe/Corporate policy; unmatched rows display as `Unallocated Costs`. Original
+values and the allocation method remain visible in the serving view. No source
+values or cost measures are rewritten. Allocation is not an authorization rule
+and does not change application entitlements or infer commitment coverage.
 Use the reference totals from this view when comparing application-owner sessions,
 not the Type-1 owner datamart's retroactively conformed grouping.
 

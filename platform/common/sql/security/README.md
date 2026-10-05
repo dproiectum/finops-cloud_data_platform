@@ -66,10 +66,17 @@ change audit; do not claim these features in the thesis.
 
 Step 7 code is now under `apps/finops_dashboard/security/`. Execute files 04/05
 manually to create/validate the charge-grain serving view, then follow that
-directory's README for an isolated local test. Signed-identity verification,
+directory's README for an isolated local test. First create the shared Gold
+allocation view with `operations/apply_cost_center_allocation.ipynb` as explained
+in the Gold README. Script 04 reads this view so public and protected Cost Center
+allocation use the same synthetic policy. Allocation never changes entitlements.
+Signed-identity verification,
 live parameterized entitlement predicates, uncached protected results and
 deny-by-default handling are implemented locally, not deployed to the public site.
 The view preserves existing FOCUS cost semantics, including ContractedCost for Savings.
+Script 04 no longer references or invents `ChargeSubcategory`; the actual source
+region column is `Region`. Before using the updated Gold loaders with old tables,
+follow `platform/common/sql/gold/README.md` for the key-preserving maintenance.
 Neither `current_user()` (the shared backend service principal) nor filtering a
 global aggregate after retrieval identifies the viewer's authorized charges.
 

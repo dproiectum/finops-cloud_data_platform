@@ -22,6 +22,44 @@ SELECT assert_true(
 )
 FROM source CROSS JOIN serving;
 
+-- Allocation and monetary totals must also agree with the shared Gold policy.
+WITH expected AS (
+    SELECT billing_month, cost_center_allocated AS cost_center,
+           COUNT(*) AS rows, coalesce(SUM(BilledCost), 0) AS billed
+    FROM finops_prod.gold.v_cost_allocation
+    GROUP BY billing_month, cost_center_allocated
+), serving AS (
+    SELECT billing_month, cost_center, COUNT(*) AS rows,
+           coalesce(SUM(billed_cost), 0) AS billed
+    FROM finops_prod.datamart.v_dashboard_charge_scoped
+    GROUP BY billing_month, cost_center
+)
+SELECT assert_true(COUNT(*) = 0,
+    'SERVING CONTROL FAILED: allocation differs from the shared Gold policy')
+FROM expected FULL OUTER JOIN serving
+  ON expected.billing_month = serving.billing_month
+ AND expected.cost_center = serving.cost_center
+WHERE expected.billing_month IS NULL OR serving.billing_month IS NULL
+   OR expected.rows <> serving.rows OR expected.billed <> serving.billed;
+
+-- Public datamart and protected charge-grain mode must agree before filtering.
+WITH serving AS (
+    SELECT billing_month, cost_center, coalesce(SUM(billed_cost), 0) AS billed
+    FROM finops_prod.datamart.v_dashboard_charge_scoped
+    GROUP BY billing_month, cost_center
+), public AS (
+    SELECT billing_month, cost_center, coalesce(SUM(total_billed_cost), 0) AS billed
+    FROM finops_prod.datamart.dm_cost_by_scope_service_month
+    GROUP BY billing_month, cost_center
+)
+SELECT assert_true(COUNT(*) = 0,
+    'SERVING CONTROL FAILED: public and protected allocation totals differ')
+FROM serving FULL OUTER JOIN public
+  ON serving.billing_month = public.billing_month
+ AND serving.cost_center = public.cost_center
+WHERE serving.billing_month IS NULL OR public.billing_month IS NULL
+   OR serving.billed <> public.billed;
+
 SELECT assert_true(
     COUNT(DISTINCT application_code) = 2,
     'SERVING CONTROL FAILED: both demo applications must have charge-grain records'

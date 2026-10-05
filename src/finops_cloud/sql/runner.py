@@ -171,6 +171,7 @@ def table_context(config) -> dict[str, str]:
         "silver_canonical": "silver",
         "silver_central": "silver",
         "fact_cost_usage": "gold",
+        "cost_allocation_view": "gold",
         "dim_date": "gold",
         "dim_billing_scope": "gold",
         "dim_resource": "gold",

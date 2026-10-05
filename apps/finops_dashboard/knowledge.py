@@ -112,7 +112,14 @@ def focus_columns() -> pd.DataFrame:
             ("SkuId", "SKU", "Provider SKU identifier", "Yes"),
             ("SubAccountId", "Organization", "Subscription identifier", "Yes"),
             ("SubAccountName", "Organization", "Subscription display name", "Yes"),
-            ("x_CostCenter", "Organization", "Azure extension used for allocation", "Yes"),
+            ("x_CostCenter", "Organization", "Internal allocation code supplied by the source. "
+             "Preserved unchanged in Silver. Missing values use the documented synthetic "
+             "Europe/Corporate allocation policy; unmatched regions remain Unallocated Costs. "
+             "This does not indicate commitment coverage.", "Yes"),
+            ("cost_center_source", "Allocation", "Original x_CostCenter, retained for traceability.", "No"),
+            ("cost_center_allocated", "Allocation", "Source cost center or synthetic regional fallback.", "No"),
+            ("allocation_method", "Allocation", "SOURCE, REGION_EUROPE, GLOBAL_CORPORATE, "
+             "REGION_CORPORATE or UNALLOCATED.", "No"),
             ("Tags", "Allocation", "Key/value metadata attached to the resource", "Yes"),
             ("_source_file", "Lineage", "Parquet path that produced the record", "No"),
             ("_ingestion_run_id", "Lineage", "Pipeline execution identifier", "No"),
@@ -130,6 +137,12 @@ def glossary() -> pd.DataFrame:
             ("Active Resource", "Distinct resource that generated at least one charge in the period."),
             ("Consumed Service", "Distinct ServiceName represented in the selected period."),
             ("Cost Center", "Organizational grouping used to allocate cloud expenditure."),
+            ("Unallocated Costs", "Costs without a usable source cost center or an applicable "
+             "fallback rule; not a Reservation/Savings Plan indicator."),
+            ("CostCenter_Europe", "Synthetic fallback for missing cost centers in West Europe, "
+             "North Europe, France Central, Sweden Central and UK South."),
+            ("CostCenter_Corporate", "Synthetic central-budget fallback for Global and explicitly "
+             "approved headquarters regions. It does not prove actual organizational ownership."),
             ("Batch", "Pipeline run identifier attached to published records."),
             ("Datamart", "Certified, subject-oriented table prepared for analytics."),
             ("Reconciliation", "Comparison of row counts and billed cost before and after publication."),

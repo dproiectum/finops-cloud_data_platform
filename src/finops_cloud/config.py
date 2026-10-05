@@ -91,6 +91,7 @@ class PlatformConfig:
     currency: str
     provider: str
     amount_tolerance: str
+    corporate_regions: tuple[str, ...] = ()
 
     def schema(self, layer: str) -> str:
         """Return a fully qualified Unity Catalog schema for a logical layer."""
@@ -157,6 +158,11 @@ def load_config(environment: str, root: Path | None = None) -> PlatformConfig:
     operations = raw["operations"]
     contract = raw["contract"]
     quality = raw["quality"]
+    corporate_regions = raw.get("cost_allocation", {}).get("corporate_regions", [])
+    if not isinstance(corporate_regions, list) or any(
+        not isinstance(region, str) or not region.strip() for region in corporate_regions
+    ):
+        raise ValueError("cost_allocation.corporate_regions must be a list of region names")
 
     config = PlatformConfig(
         environment=environment,
@@ -190,6 +196,7 @@ def load_config(environment: str, root: Path | None = None) -> PlatformConfig:
         currency=str(quality["currency"]),
         provider=str(quality["provider"]),
         amount_tolerance=str(quality["amount_tolerance"]),
+        corporate_regions=tuple(corporate_regions),
     )
 
     validate_config(config)
@@ -222,6 +229,7 @@ def validate_config(config: PlatformConfig) -> None:
         "silver_canonical",
         "silver_central",
         "fact_cost_usage",
+        "cost_allocation_view",
         "dim_date",
         "dim_billing_scope",
         "dim_resource",

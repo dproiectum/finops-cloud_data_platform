@@ -80,6 +80,7 @@ SELECT
     n_pricing_currency, coalesce(CAST(x_PartnerCreditApplied AS STRING), 'Unknown')), 256) AS pricing_sk,
   sha2(concat_ws('||', 'commitment', n_commitment_id, n_commitment_name,
     n_commitment_category, n_commitment_type), 256) AS commitment_sk,
+  -- Same legacy compatibility token as dim_charge_type; no business subcategory.
   sha2(concat_ws('||', 'charge_type', n_charge_category, 'Unknown',
     n_charge_frequency), 256) AS charge_type_sk,
   CAST(date_format(to_date(BillingPeriodStart), 'yyyyMMdd') AS BIGINT) AS billing_period_start_date_sk,

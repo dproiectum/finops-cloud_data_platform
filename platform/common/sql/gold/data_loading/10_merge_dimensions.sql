@@ -289,12 +289,13 @@ USING (
   WITH normalized AS (
     SELECT DISTINCT
       coalesce(nullif(trim(ChargeCategory), ''), 'Unknown') AS charge_category,
-      'Unknown' AS charge_subcategory,
       coalesce(nullif(trim(ChargeFrequency), ''), 'Unknown') AS charge_frequency
     FROM {source_month}
   )
+  -- Keep the legacy hash format to preserve existing fact foreign keys.
+  -- The constant is a compatibility token, not a charge-subcategory attribute.
   SELECT sha2(concat_ws('||', 'charge_type', charge_category,
-    charge_subcategory, charge_frequency), 256) AS charge_type_sk, *
+    'Unknown', charge_frequency), 256) AS charge_type_sk, *
   FROM normalized
 ) AS source
 ON target.charge_type_sk = source.charge_type_sk
