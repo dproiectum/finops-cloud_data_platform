@@ -62,12 +62,14 @@ Uniqueness is checked for the selected records, not enforced by an SQL primary
 key. This initial metadata setup has no historical versioning or authorization
 change audit; do not claim these features in the thesis.
 
-## Not ready yet: application enforcement and validation
+## Step 7 code available locally; live validation pending
 
-Step 7 still requires signed-identity verification, entitlement resolution,
-parameterized queries, scope-capable serving products, scope isolation in caches,
-and deny-by-default handling for every page and export. The scoped products must
-preserve the existing FOCUS cost semantics, including ContractedCost for Savings.
+Step 7 code is now under `apps/finops_dashboard/security/`. Execute files 04/05
+manually to create/validate the charge-grain serving view, then follow that
+directory's README for an isolated local test. Signed-identity verification,
+live parameterized entitlement predicates, uncached protected results and
+deny-by-default handling are implemented locally, not deployed to the public site.
+The view preserves existing FOCUS cost semantics, including ContractedCost for Savings.
 Neither `current_user()` (the shared backend service principal) nor filtering a
 global aggregate after retrieval identifies the viewer's authorized charges.
 
@@ -79,7 +81,7 @@ filtered cost is not necessarily smaller than the global total. Global OPS
 operational pages must not be exposed to restricted application owners.
 
 These metadata checks are not substitutes for the step 8 authorization tests.
-Keep the public portfolio unchanged while implementing and testing those controls
+Keep the public portfolio unchanged while testing those controls
 separately. Any later IAP deployment requires a separate private-service plan.
 
 ## Technical references

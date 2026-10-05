@@ -15,7 +15,7 @@ import queries  # noqa: E402
 
 class DashboardTests(unittest.TestCase):
     def test_dashboard_python_files_compile(self):
-        for path in APP.glob("*.py"):
+        for path in APP.rglob("*.py"):
             compile(path.read_text(encoding="utf-8"), str(path), "exec")
 
     def test_dashboard_defaults_to_prod_and_shared_ops(self):

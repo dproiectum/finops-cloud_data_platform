@@ -136,6 +136,22 @@ class SqlModelTests(unittest.TestCase):
         ):
             self.assertEqual(placeholders(sql_text(f"security/{filename}")), set())
 
+    def test_security_serving_view_is_additive_and_preserves_cost_bases(self):
+        view = sql_text("security/04_create_dashboard_serving_view.sql")
+        self.assertEqual(len(split_statements(view)), 1)
+        self.assertIn("CREATE OR REPLACE VIEW finops_prod.datamart.v_dashboard_charge_scoped", view)
+        for column in ("BilledCost", "EffectiveCost", "ListCost", "ContractedCost"):
+            self.assertIn(column, view)
+        self.assertNotIn("JOIN", view)
+        self.assertNotIn("CREATE OR REPLACE TABLE", view)
+        self.assertIn("ApplicationCode-Symphony", view)
+        validation = sql_text("security/05_validate_dashboard_serving_view.sql")
+        self.assertIn("source.contracted = serving.contracted", validation)
+        self.assertIn("test application enforcement separately", validation)
+        for relative_path in ("controls/01_validate_empty_platform.sql",
+                              "controls/03_validate_prod_ready.sql"):
+            self.assertIn("table_type <> 'VIEW'", sql_text(relative_path))
+
     def test_all_datamarts_are_rebuilt_instead_of_appended(self):
         for relative_path in DATAMART_SCRIPTS:
             self.assertIn("CREATE OR REPLACE TABLE", sql_text(relative_path))

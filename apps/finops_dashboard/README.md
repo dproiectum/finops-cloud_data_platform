@@ -134,21 +134,23 @@ Source: https://focus.finops.org/docs/specification/v1-0/columns/cost-and-usage/
 
 ## Security boundary
 
-The current backend identity and read-only SQL access are separate from viewer
-authorization. No viewer-specific role/scope enforcement is implemented yet.
-The proposed controls in the thesis require authenticated identity verification,
-deny-by-default entitlements, scoped SQL queries and cache isolation by authorized
-scope. Existing globally aggregated datamarts cannot enforce an application-owner
-perimeter after aggregation; scoped products or queries must retain the required
-business keys. A public portfolio must use synthetic data only; a demonstration
-persona selector is not production authentication.
+The backend identity and read-only SQL access are separate from viewer
+authorization. The public deployment still uses global synthetic datamarts.
+Local code now supports explicit `public`, local-only `demo`, and verified `iap`
+modes. Protected queries enforce live viewer entitlements before aggregation and
+do not share Streamlit query-result caches. This is application-level enforcement,
+not a Unity Catalog row-filter policy. No private IAP service or real-user access
+has been deployed by this change. A public portfolio must use synthetic data only;
+a demonstration persona selector is not production authentication.
 
-### Planned implementation and thesis evidence
+### Implementation and remaining live validation
 
 Manual metadata scripts are available under `platform/common/sql/security/`.
 They seed two confirmed PROD application scopes and three synthetic demo
-entitlements only. They do not implement viewer authentication or authorization,
-and no Cloud Run deployment is needed to execute them in SQL Editor.
+entitlements only. Files 04/05 now create and validate an ordinary charge-grain
+serving view, without reloading data. Execute them manually, then follow
+`apps/finops_dashboard/security/README.md` for isolated local tests. SQL setup alone
+does not enable viewer enforcement on the public site.
 
 1. Confirm the application/project/domain keys and the hierarchy used for scopes.
    The owner datamart retains `application_code`; the scope/service datamart does
@@ -157,18 +159,18 @@ and no Cloud Run deployment is needed to execute them in SQL Editor.
 2. Create `finops_ops.security.user_entitlement` and `business_scope`, and populate
    approved synthetic assignments for a first controlled demonstration. This is
    additive setup, not a catalog reset or a full data reload.
-3. Enforce scope in every query before aggregation, using parameters and an
-   authorized key set. Add or refresh only the scoped products that are required
-   if existing products lack the necessary keys. Keep OPS administrative views
-   restricted to the appropriate role.
-4. Isolate cached query results by resolved scope and entitlement version. Test
+3. Protected mode enforces scope before aggregation through bound parameters and
+   live entitlement predicates against a charge-grain serving view. Test this
+   against the real synthetic dataset. OPS is administrator-only.
+4. Protected mode disables query-result and permission caches. Test
    both page navigation and table export; hiding navigation is not authorization.
 5. For deployed authentication, configure IAP, validate the signed assertion with
    its expected audience and expiry, and reject missing or invalid identities.
    A fixed-persona selector is a synthetic authorization test harness only.
 6. Retain denial/isolation tests, deployed revision, sanitized grants and matched
    scoped totals. Chapter 5.3.6 describes the design; chapter 7.5 reports results
-   only after execution. Until then, describe these controls as proposed.
+   only after execution. Distinguish local implementation, fixture results and
+   live deployment evidence rather than reporting them as one completed stage.
 
 Sources: https://docs.cloud.google.com/iap/docs/identity-howto;
 https://docs.cloud.google.com/iap/docs/signed-headers-howto.

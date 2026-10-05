@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from typing import Any, Mapping
 
 import pandas as pd
 
@@ -45,10 +46,13 @@ class DatabricksDataSource:
             _use_arrow_native_complex_types=False,
         )
 
-    def query(self, sql_text: str) -> pd.DataFrame:
+    def query(self, sql_text: str, parameters: Mapping[str, Any] | None = None) -> pd.DataFrame:
         with self._connect() as connection:
             with connection.cursor() as cursor:
-                cursor.execute(sql_text)
+                if parameters is None:
+                    cursor.execute(sql_text)
+                else:
+                    cursor.execute(sql_text, parameters=dict(parameters))
                 return cursor.fetchall_arrow().to_pandas()
 
     def healthcheck(self) -> None:

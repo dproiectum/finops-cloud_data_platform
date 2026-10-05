@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -18,6 +19,11 @@ from formatting import (
 )
 from knowledge import cost_formulas, focus_columns, glossary
 import queries
+from security import (
+    BoundQuery, SecurityError, auth_mode, demo_identity, iap_identity, resolve_access,
+)
+from security.identity import DEMO_PERSONAS
+from security.queries import ScopedQueries
 
 
 st.set_page_config(
@@ -70,18 +76,59 @@ def build_source() -> DatabricksDataSource:
     return result
 
 
+# Authenticate before any business query or connection. Public is explicitly the
+# existing synthetic portfolio; a broken protected mode never falls back to it.
+access = None
+try:
+    mode = auth_mode()
+    identity = None
+    if mode == "demo":
+        st.sidebar.warning("Local synthetic authorization test — not authentication")
+        persona = st.sidebar.selectbox("Demo identity", DEMO_PERSONAS, key="demo_identity")
+        identity = demo_identity(persona)
+    elif mode == "iap":
+        identity = iap_identity(st.context.headers, os.environ["FINOPS_IAP_AUDIENCE"].strip())
+        st.sidebar.caption(f"Verified identity: {identity.subject}")
+except SecurityError as exc:
+    st.error(str(exc))
+    st.stop()
+
 try:
     config = DashboardConfig.from_environment()
     source = build_source()
-except Exception as exc:
+    if identity is not None:
+        access = resolve_access(source, config, identity)
+        queries = ScopedQueries(access)
+except SecurityError as exc:
+    st.error(str(exc))
+    st.stop()
+except Exception:
     st.error("Unable to connect to Databricks SQL")
-    st.code(str(exc))
     st.stop()
 
 
 @st.cache_data(ttl=300, show_spinner=False)
-def load_frame(sql_text: str) -> pd.DataFrame:
+def load_public_frame(sql_text: str) -> pd.DataFrame:
     return source.query(sql_text)
+
+
+def load_frame(statement: str | BoundQuery) -> pd.DataFrame:
+    # Protected query results are NEVER shared through Streamlit's process cache.
+    # SQL rechecks live grants on every call, including expiry and revocation.
+    try:
+        if access is not None:
+            if not isinstance(statement, BoundQuery):
+                raise SecurityError("Unscoped query refused.")
+            return source.query(statement.text, statement.parameters)
+        if not isinstance(statement, str):
+            raise SecurityError("Invalid public query.")
+        return load_public_frame(statement)
+    except SecurityError as exc:
+        st.error(str(exc))
+        st.stop()
+    except Exception:
+        st.error("Data is unavailable or access was refused. No fallback data is shown.")
+        st.stop()
 
 
 def require_row(frame: pd.DataFrame, subject: str) -> pd.Series:
@@ -427,20 +474,31 @@ def allocation_page(month: str) -> None:
                         width="stretch")
         st.caption("One color and one bar per service; this view shows the top 30 services by cost.")
     with center_tab:
-        figure = px.treemap(
-            centers,
-            path=["cost_center"],
-            values="total_billed_cost",
-            color="total_billed_cost",
-            color_continuous_scale=["#deecf9", "#71afe5", "#0078d4", "#005a9e"],
-            title="Cost-center allocation",
-            labels={"total_billed_cost": "Billed cost (€)", "cost_center": "Cost center"},
-        )
-        figure.update_traces(
-            customdata=[[money(value)] for value in figure.data[0].values],
-            hovertemplate="%{label}<br>Billed cost: %{customdata[0]}<extra></extra>",
-        )
-        figure.update_coloraxes(colorbar_tickformat=",.0f")
+        if (center_cost < 0).any() or not (center_cost > 0).any():
+            # A scoped perimeter can have net credits. Treemap areas cannot
+            # represent negative values; retain them as signed bars instead.
+            figure = px.bar(
+                centers.sort_values("total_billed_cost"), x="total_billed_cost", y="cost_center",
+                orientation="h", title="Cost-center allocation",
+                labels={"total_billed_cost": "Billed cost (€)", "cost_center": "Cost center"},
+                color_discrete_sequence=["#0078d4"],
+            )
+            st.caption("Signed bars retain credits and non-positive cost-center totals.")
+        else:
+            figure = px.treemap(
+                centers,
+                path=["cost_center"],
+                values="total_billed_cost",
+                color="total_billed_cost",
+                color_continuous_scale=["#deecf9", "#71afe5", "#0078d4", "#005a9e"],
+                title="Cost-center allocation",
+                labels={"total_billed_cost": "Billed cost (€)", "cost_center": "Cost center"},
+            )
+            figure.update_traces(
+                customdata=[[money(value)] for value in figure.data[0].values],
+                hovertemplate="%{label}<br>Billed cost: %{customdata[0]}<extra></extra>",
+            )
+            figure.update_coloraxes(colorbar_tickformat=",.0f")
         st.plotly_chart(chart_layout(figure, 520), width="stretch")
         st.dataframe(financial_table(centers), hide_index=True, width="stretch")
     with subscription_tab:
@@ -498,6 +556,9 @@ def resources_page(month: str) -> None:
 
 
 def operations_page(month: str) -> None:
+    if access is not None and not access.is_admin:
+        st.error("Operations access is restricted to FinOps administrators.")
+        st.stop()
     page_title(
         "DATA PLATFORM · OPERATE",
         "Operations & Data Quality",
@@ -591,6 +652,12 @@ def architecture_page() -> None:
         )
         st.plotly_chart(chart_layout(figure, 590), width="stretch")
     with layers_tab:
+        if access is not None:
+            st.info(
+                "Protected pages use v_dashboard_charge_scoped, a charge-grain view of Silver, "
+                "with live viewer permissions applied before aggregation. Public pages keep "
+                "the existing global datamarts."
+            )
         columns = st.columns(6)
         for column, title, description in zip(
             columns,
@@ -644,23 +711,29 @@ def executive_entry() -> None:
         executive_annual_page(selected_year, comparison_year)
 
 
-# Native top navigation: only the selected page runs, with bookmarkable page URLs.
-navigation = st.navigation([
+# Native top navigation: protected OPS is absent for restricted viewers. The
+# page body and SQL also enforce this rule; hiding navigation alone is not enough.
+pages = [
     st.Page(executive_entry, title="Executive Overview", url_path="overview", default=True),
     st.Page(lambda: cost_drivers_page(selected_month), title="Cost Drivers", url_path="drivers"),
     st.Page(lambda: savings_page(selected_month), title="Savings", url_path="savings"),
     st.Page(lambda: allocation_page(selected_month), title="Allocation & Accountability",
             url_path="allocation"),
     st.Page(lambda: resources_page(selected_month), title="Resources", url_path="resources"),
-    st.Page(lambda: operations_page(selected_month), title="Operations & Quality",
-            url_path="operations"),
     st.Page(knowledge_page, title="Knowledge Base", url_path="knowledge"),
     st.Page(architecture_page, title="Architecture", url_path="architecture"),
-], position="top")
+]
+if access is None or access.is_admin:
+    pages.insert(5, st.Page(lambda: operations_page(selected_month), title="Operations & Quality",
+                            url_path="operations"))
+navigation = st.navigation(pages, position="top")
 
 with st.sidebar:
     st.markdown("### FinOps Control Center")
     st.caption("Certified cloud cost intelligence")
+    if access is not None:
+        st.caption(f"Identity: {access.identity.subject}")
+        st.caption("Authorized scope only · no shared query-result cache")
     st.markdown(
         f'<span class="status-pill">{source.label} · {config.environment.upper()}</span>',
         unsafe_allow_html=True,
@@ -675,9 +748,8 @@ with st.sidebar:
         try:
             month_frame = load_frame(queries.available_months(config))
             months = sorted(month_frame["billing_month"].astype(str).unique(), reverse=True)
-        except Exception as exc:
+        except Exception:
             st.error("Certified datamarts are unavailable")
-            st.code(str(exc))
             st.stop()
         if not months:
             st.warning("No billing month is available")
@@ -699,6 +771,7 @@ with st.sidebar:
             )
     st.divider()
     st.caption(f"Catalog: {config.data_catalog}")
-    st.caption("Read-only · certified datamarts")
+    st.caption("Read-only · authorized charge view" if access is not None
+               else "Read-only · certified datamarts")
 
 navigation.run()

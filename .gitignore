@@ -1,5 +1,6 @@
 .venv/
 .venv-databricks/
+.venv-dashboard/
 dist/
 build/
 *.egg-info/

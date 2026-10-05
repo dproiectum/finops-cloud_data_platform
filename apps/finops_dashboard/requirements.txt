@@ -4,3 +4,5 @@ pandas>=2.2,<4
 pyarrow>=14,<27
 databricks-sql-connector>=4,<5
 databricks-sdk>=0.60,<1
+google-auth[requests]>=2.40,<3
+cryptography>=44,<48

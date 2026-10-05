@@ -70,7 +70,7 @@ WITH expected(schema_name, expected_count) AS (
 ), actual AS (
   SELECT table_schema AS schema_name, count(*) AS actual_count
   FROM `finops_prod`.`information_schema`.`tables`
-  WHERE table_schema IN ('bronze', 'silver', 'gold', 'datamart')
+  WHERE table_schema IN ('bronze', 'silver', 'gold', 'datamart') AND table_type <> 'VIEW'
   GROUP BY table_schema
 ), mismatches AS (
   SELECT expected.schema_name

@@ -3,12 +3,12 @@
 
 SELECT 'finops_dev' AS table_catalog, table_schema, count(*) AS table_count
 FROM `finops_dev`.`information_schema`.`tables`
-WHERE table_schema IN ('bronze', 'silver', 'gold', 'datamart')
+WHERE table_schema IN ('bronze', 'silver', 'gold', 'datamart') AND table_type <> 'VIEW'
 GROUP BY table_schema
 UNION ALL
 SELECT 'finops_prod' AS table_catalog, table_schema, count(*) AS table_count
 FROM `finops_prod`.`information_schema`.`tables`
-WHERE table_schema IN ('bronze', 'silver', 'gold', 'datamart')
+WHERE table_schema IN ('bronze', 'silver', 'gold', 'datamart') AND table_type <> 'VIEW'
 GROUP BY table_schema
 ORDER BY table_catalog, table_schema;
 
