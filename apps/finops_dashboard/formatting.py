@@ -19,6 +19,7 @@ SAVINGS_DETAIL_COLUMNS = {
     "usage_dynamic": "Usage Dynamic",
     "adjustment": "Adjustment",
     "effective_cost": "Effective Cost",
+    "total_savings": "Realized Savings",
     "savings_rate": "Saving Rate",
 }
 
@@ -85,9 +86,10 @@ def savings_detail_table(frame: pd.DataFrame):
         # Future tax/credit/purchase or unclassified charges must not disappear.
         columns = {
             **{key: value for key, value in columns.items()
-               if key not in {"effective_cost", "savings_rate"}},
+               if key not in {"effective_cost", "total_savings", "savings_rate"}},
             "other_effective_cost": "Other Charges",
             "effective_cost": "Effective Cost",
+            "total_savings": "Realized Savings",
             "savings_rate": "Saving Rate",
         }
     detail = frame.reindex(columns=columns).rename(columns=columns)

@@ -39,15 +39,17 @@ and a new revision is deployed.
   year against a partial year. The difference rate is computed from summed cost
   bases, not the average of monthly rates. Distinct monthly resource/service counts
   are not summed into annual distinct counts.
-- Savings stacks Effective Cost (dark blue) and Net Price Benefit (light green).
+- Savings stacks Effective Cost (dark blue) and Realized Savings (light green).
   Their total equals List Cost. There is no Contract Cost marker or third series.
   If a list/effective cost is negative or missing, or Effective Cost exceeds List
   Cost, the same two series use grouped bars; negative values are never clipped.
-  The title is **Net Price Benefit**, not **Realized Savings**: these synthetic
+  The title and display label are **Realized Savings**, defined as List Cost minus
+  Effective Cost. The green-bar tooltip shows List Cost followed by Realized Savings,
+  with European currency formatting. The page retains a warning that these synthetic
   cost comparisons do not establish realized organizational or cash savings.
 - **Detailed Table** uses business labels in this order: Billing Month, List Cost,
   Contract Cost, Negotiated Savings, Reservation, Savings Plan, Usage On-Demand,
-  Usage Dynamic, Adjustment, Effective Cost, Saving Rate. Commitment Savings is
+  Usage Dynamic, Adjustment, Effective Cost, Realized Savings, Saving Rate. Commitment Savings is
   no longer displayed. Reservation and Savings Plan are sums of source
   `EffectiveCost` on the corresponding commitment-based Usage rows, not full
   upfront purchase prices. Other Charges appears before Effective Cost only

@@ -335,14 +335,17 @@ def savings_page(month: str) -> None:
     cards[0].metric("List Cost", money(savings["list_cost"]))
     cards[1].metric("Contract Cost", money(savings["contracted_cost"]))
     cards[2].metric("Effective Cost", money(savings["effective_cost"]))
-    cards[3].metric("Net Price Benefit", money(benefit))
-    st.caption(f"Net price benefit rate: {percent(savings['savings_rate'])}.")
+    cards[3].metric("Realized Savings", money(benefit))
+    st.caption(
+        "Realized Savings = List Cost − Effective Cost. "
+        f"Saving rate: {percent(savings['savings_rate'])}."
+    )
     figure, stacked = savings_cost_chart(history)
     st.plotly_chart(figure, width="stretch")
     if not stacked:
         st.info(
             "Some months have a negative or missing cost, or effective cost above list cost. "
-            "Effective Cost and Net Price Benefit are shown side by side to retain these values."
+            "Effective Cost and Realized Savings are shown side by side to retain these values."
         )
     st.subheader("Detailed Table")
     st.caption(
@@ -366,21 +369,27 @@ def savings_page(month: str) -> None:
         history,
         x="billing_month",
         y="total_savings",
-        title="Net Price Benefit by Month",
-        labels={"billing_month": "Month", "total_savings": "Net Price Benefit (€)"},
+        title="Realized Savings by Month",
+        labels={"billing_month": "Month", "total_savings": "Realized Savings (€)"},
         color_discrete_sequence=["#8fd5a6"],
     )
     figure.update_traces(
-        customdata=[[money(value) if pd.notna(value) else "Unavailable"]
-                    for value in history["total_savings"]],
-        hovertemplate="%{x}<br>Net Price Benefit: %{customdata[0]}<extra></extra>",
+        customdata=[
+            [money(value) if pd.notna(value) else "Unavailable",
+             money(list_cost) if pd.notna(list_cost) else "Unavailable"]
+            for value, list_cost in zip(history["total_savings"], history["list_cost"])
+        ],
+        hovertemplate=(
+            "%{x}<br>List Cost: %{customdata[1]}"
+            "<br>Realized Savings: %{customdata[0]}<extra></extra>"
+        ),
     )
     figure.update_xaxes(type="category")
     st.plotly_chart(chart_layout(figure, 440), width="stretch")
     st.warning(
-        "These are technical comparisons between FOCUS cost columns. Negative values "
-        "remain visible, and none of these indicators should be described as realized "
-        "cash savings without a validated business baseline."
+        "Realized Savings is the dashboard label for List Cost minus Effective Cost. "
+        "This synthetic cost comparison does not establish realized organizational "
+        "or cash savings without a validated business baseline. Negative values remain visible."
     )
 
 

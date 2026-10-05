@@ -100,18 +100,24 @@ def savings_cost_chart(frame: pd.DataFrame):
     figure = go.Figure()
     for column, name, color in (
         ("effective_cost", "Effective Cost", "#005a9e"),
-        ("price_benefit", "Net Price Benefit", "#8fd5a6"),
+        ("price_benefit", "Realized Savings", "#8fd5a6"),
     ):
         figure.add_trace(go.Bar(
             x=costs["billing_month"], y=costs[column], name=name, marker_color=color,
             customdata=[
-                [money(value) if pd.notna(value) else "Unavailable"]
-                for value in costs[column]
+                [money(value) if pd.notna(value) else "Unavailable",
+                 money(list_cost) if pd.notna(list_cost) else "Unavailable"]
+                for value, list_cost in zip(costs[column], costs["list_cost"])
             ],
-            hovertemplate=f"%{{x}}<br>{name}: %{{customdata[0]}}<extra></extra>",
+            hovertemplate=(
+                "%{x}<br>List Cost: %{customdata[1]}"
+                "<br>Realized Savings: %{customdata[0]}<extra></extra>"
+                if column == "price_benefit"
+                else "%{x}<br>Effective Cost: %{customdata[0]}<extra></extra>"
+            ),
         ))
     figure.update_layout(
-        barmode="stack" if stacked else "group", title="Net Price Benefit",
+        barmode="stack" if stacked else "group", title="Realized Savings",
     )
     figure.update_xaxes(title="Month", type="category")
     figure.update_yaxes(title="Cost (€)")

@@ -92,6 +92,10 @@ class DashboardPresentationTests(unittest.TestCase):
         self.assertEqual(list(styled.data.columns), list(SAVINGS_DETAIL_COLUMNS.values()))
         self.assertNotIn("commitment_savings", styled.data)
         self.assertNotIn("Other Charges", styled.data)
+        self.assertEqual(list(styled.data.columns)[-3:],
+                         ["Effective Cost", "Realized Savings", "Saving Rate"])
+        self.assertEqual(styled.data["Realized Savings"].iloc[0], 200)
+        self.assertIn("200,00 €", styled.to_html())
         self.assertIn("1\u202f100,00 €", styled.to_html())
         self.assertIn("-5,00 €", styled.to_html())
         self.assertIn("15,38 %", styled.to_html())
@@ -110,8 +114,8 @@ class DashboardPresentationTests(unittest.TestCase):
         styled = savings_detail_table(pd.DataFrame([{
             "billing_month": "2026-01", "other_effective_cost": -2.5,
         }]))
-        self.assertEqual(list(styled.data.columns)[-3:],
-                         ["Other Charges", "Effective Cost", "Saving Rate"])
+        self.assertEqual(list(styled.data.columns)[-4:],
+                         ["Other Charges", "Effective Cost", "Realized Savings", "Saving Rate"])
         self.assertIn("-2,50 €", styled.to_html())
 
     def test_services_have_one_bar_per_name_and_explicit_order(self):
@@ -157,12 +161,26 @@ class DashboardPresentationTests(unittest.TestCase):
         self.assertEqual(list(figure.data[1].y), [200])
         self.assertEqual(len(figure.data), 2)
         self.assertEqual([trace.name for trace in figure.data],
-                         ["Effective Cost", "Net Price Benefit"])
+                         ["Effective Cost", "Realized Savings"])
         self.assertEqual(figure.data[0].marker.color, "#005a9e")
         self.assertEqual(figure.data[1].marker.color, "#8fd5a6")
-        self.assertEqual(figure.layout.title.text, "Net Price Benefit")
+        self.assertEqual(figure.layout.title.text, "Realized Savings")
         self.assertIn("1\u202f100,00 €", figure.data[0].customdata[0])
+        self.assertEqual(list(figure.data[1].customdata[0]), ["200,00 €", "1\u202f300,00 €"])
+        self.assertEqual(figure.data[1].hovertemplate,
+                         "%{x}<br>List Cost: %{customdata[1]}"
+                         "<br>Realized Savings: %{customdata[0]}<extra></extra>")
         pd.testing.assert_frame_equal(frame, original)
+
+    def test_savings_tooltip_keeps_month_costs_aligned_after_sorting(self):
+        figure, _ = savings_cost_chart(pd.DataFrame({
+            "billing_month": ["2026-02", "2026-01"],
+            "list_cost": [2000, 1300], "effective_cost": [1500, 1100],
+        }))
+        self.assertEqual(list(figure.data[1].x), ["2026-01", "2026-02"])
+        self.assertEqual([list(row) for row in figure.data[1].customdata],
+                         [["200,00 €", "1\u202f300,00 €"],
+                          ["500,00 €", "2\u202f000,00 €"]])
 
     def test_savings_never_clips_negative_costs_or_missing_values(self):
         for values in [(100, 90, 110), (-100, -90, -80), (None, 90, 80), (100, 90, None)]:
@@ -266,16 +284,26 @@ class DashboardPresentationTests(unittest.TestCase):
                         app = AppTest.from_file(str(APP / "app.py"), default_timeout=30).run()
                         self.assertFalse(app.exception)
                         if title == "Savings":
+                            self.assertEqual(app.metric[3].label, "Realized Savings")
                             self.assertEqual(app.metric[3].value, "189\u202f234,20 €")
                             chart = json.loads(app.get("plotly_chart")[0].proto.spec)
                             self.assertEqual(chart["layout"]["barmode"], "stack")
                             self.assertEqual(chart["data"][0]["name"], "Effective Cost")
+                            self.assertEqual(chart["data"][1]["name"], "Realized Savings")
+                            self.assertEqual(chart["layout"]["title"]["text"], "Realized Savings")
+                            self.assertIn("List Cost: %{customdata[1]}",
+                                          chart["data"][1]["hovertemplate"])
                             self.assertEqual(len(chart["data"]), 2)
                             self.assertEqual(app.subheader[0].value, "Detailed Table")
                             self.assertEqual(list(app.dataframe[0].value.columns),
                                              list(SAVINGS_DETAIL_COLUMNS.values()))
                             self.assertFalse(any("diamond" in item.value for item in app.caption))
                             self.assertIn('"type":"category"', app.get("plotly_chart")[1].proto.spec)
+                            trend = json.loads(app.get("plotly_chart")[1].proto.spec)
+                            self.assertEqual(trend["layout"]["title"]["text"],
+                                             "Realized Savings by Month")
+                            self.assertIn("Realized Savings: %{customdata[0]}",
+                                          trend["data"][0]["hovertemplate"])
 
     def test_savings_page_stays_usable_before_datamart_refresh(self):
         fixture = pd.DataFrame([{
