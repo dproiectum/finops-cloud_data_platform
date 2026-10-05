@@ -9,28 +9,28 @@ def cost_formulas() -> pd.DataFrame:
     return pd.DataFrame(
         [
             (
-                "Billed cost",
+                "Billed Cost",
                 "SUM(BilledCost)",
                 "Amount invoiced in the billing currency. Credits and adjustments may be negative.",
             ),
             (
-                "List cost",
+                "List Cost",
                 "SUM(ListCost)",
                 "Cost calculated from public or list prices where the provider supplies it.",
             ),
             (
-                "Contracted cost",
+                "Contract Cost",
                 "SUM(ContractedCost)",
                 "Cost calculated from negotiated prices before applicable commitment benefits.",
             ),
             (
-                "Effective cost",
+                "Effective Cost",
                 "SUM(EffectiveCost)",
                 "Aggregate the source-provided amortized cost, including discounts and "
                 "allocated prepaid purchases. The dashboard does not recalculate amortization.",
             ),
             (
-                "Effective cost breakdown",
+                "Effective Cost Breakdown",
                 "Reservation + Savings Plan + Usage On-Demand + Usage Dynamic + Adjustment "
                 "(+ Other Charges, when present)",
                 "Each component sums EffectiveCost for a mutually exclusive group of source rows. "
@@ -54,28 +54,30 @@ def cost_formulas() -> pd.DataFrame:
                 "amount is non-zero; it keeps taxes, credits and unclassified charges in the total.",
             ),
             (
-                "Negotiated difference",
-                "List cost − Contracted cost",
+                "Negotiated Savings",
+                "List Cost − Contract Cost",
                 "Technical price comparison; it is not automatically verified cash savings.",
             ),
             (
-                "Total difference vs list",
-                "List cost − Effective cost",
-                "Technical comparison between public price and effective economic cost.",
+                "Savings vs. Catalog Price",
+                "List Cost − Effective Cost",
+                "Catalog Price means the provider's list price. Positive: effective cost is "
+                "below list cost. Negative: effective cost is above list cost. This is the same "
+                "price comparison labelled Realized Savings on the Savings page, not proof of cash savings.",
             ),
             (
-                "Savings rate",
-                "(List cost − Effective cost) / List cost × 100",
-                "Returns zero when List cost is zero.",
+                "Catalog Price Difference Rate / Saving Rate",
+                "(List Cost − Effective Cost) / List Cost × 100",
+                "Returns zero when List Cost is zero.",
             ),
             (
-                "Month-over-month change",
-                "(Current billed cost − Previous billed cost) / |Previous billed cost| × 100",
+                "Month-over-Month Change",
+                "(Current Billed Cost − Previous Billed Cost) / |Previous Billed Cost| × 100",
                 "Not calculated when the previous month is zero or absent.",
             ),
             (
-                "Average cost per resource",
-                "Billed cost / Active resources",
+                "Average by Resource",
+                "Billed Cost / Active Resources",
                 "Portfolio-level indicator, not a unit price.",
             ),
         ],
@@ -124,10 +126,10 @@ def focus_columns() -> pd.DataFrame:
 def glossary() -> pd.DataFrame:
     return pd.DataFrame(
         [
-            ("Charge line", "One cost or usage record conforming to the FOCUS model."),
-            ("Active resource", "Distinct resource that generated at least one charge in the period."),
-            ("Consumed service", "Distinct ServiceName represented in the selected period."),
-            ("Cost center", "Organizational grouping used to allocate cloud expenditure."),
+            ("Charge Line", "One cost or usage record conforming to the FOCUS model."),
+            ("Active Resource", "Distinct resource that generated at least one charge in the period."),
+            ("Consumed Service", "Distinct ServiceName represented in the selected period."),
+            ("Cost Center", "Organizational grouping used to allocate cloud expenditure."),
             ("Batch", "Pipeline run identifier attached to published records."),
             ("Datamart", "Certified, subject-oriented table prepared for analytics."),
             ("Reconciliation", "Comparison of row counts and billed cost before and after publication."),

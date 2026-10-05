@@ -45,8 +45,38 @@ def percent(value: object, *, signed: bool = False) -> str:
     return f"{decimal_number(value, signed=signed)} %"
 
 
+def column_label(column: object) -> str:
+    """Business-facing headers only; source/query identifiers stay unchanged."""
+    aliases = {
+        "average_cost_per_resource": "Average by Resource",
+        "savings_vs_list": "Savings vs. Catalog Price",
+        "total_savings": "Realized Savings",
+        "total_savings_vs_list": "Total Savings vs. List Price",
+        "contracted_cost": "Contract Cost",
+        "savings_rate": "Saving Rate",
+        "usage_on_demand": "Usage On-Demand",
+        "month_change_rate": "Month-over-Month Change Rate",
+        "critical_completeness_rate": "Critical Completeness Rate",
+    }
+    name = str(column)
+    if name in aliases:
+        return aliases[name]
+    acronyms = {"id": "ID", "ids": "IDs", "sku": "SKU", "skus": "SKUs",
+                "sql": "SQL", "kpi": "KPI", "dbu": "DBU", "url": "URL",
+                "dev": "DEV", "prod": "PROD", "ops": "OPS"}
+    return " ".join(acronyms.get(word.lower(), word.capitalize())
+                    for word in name.replace("_", " ").split())
+
+
+def comparison_state(value: object) -> str:
+    """Do not paint a cost increase, zero or missing value as a benefit."""
+    if value is None or pd.isna(value) or value == 0:
+        return "neutral"
+    return "positive" if value > 0 else "negative"
+
+
 def financial_table(frame: pd.DataFrame):
-    """Format known measures for display without converting numeric data to text."""
+    """Readable headers and European measures on a copy, never on source data."""
     formatters = {
         "total_billed_cost": money,
         "billed_cost": money,
@@ -71,8 +101,10 @@ def financial_table(frame: pd.DataFrame):
         "successful_runs": integer,
         "Value": integer,  # Count-only quality-control table.
     }
-    return frame.style.format(
-        {column: formatter for column, formatter in formatters.items() if column in frame},
+    labels = {column: column_label(column) for column in frame.columns}
+    display = frame.rename(columns=labels)
+    return display.style.format(
+        {labels[column]: formatter for column, formatter in formatters.items() if column in frame},
         na_rep="—",
     )
 

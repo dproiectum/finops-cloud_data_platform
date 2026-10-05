@@ -560,8 +560,8 @@ class ProtectedDashboardTests(unittest.TestCase):
             app = AppTest.from_file(str(APP / "app.py"), default_timeout=30).run()
             app.selectbox(key="billing_month").select("2026-01").run()
             self.assertFalse(app.exception)
-            frames = [frame.value for frame in app.dataframe if "cost_center" in frame.value]
-            self.assertEqual(frames[0]["total_billed_cost"].min(), -300)
+            frames = [frame.value for frame in app.dataframe if "Cost Center" in frame.value]
+            self.assertEqual(frames[0]["Total Billed Cost"].min(), -300)
             self.assertTrue(any("Signed bars retain credits" in caption.value
                                 for caption in app.caption))
 

@@ -1,6 +1,7 @@
 """Presentation regression tests; no Databricks connection or credentials needed."""
 
 from decimal import Decimal
+import ast
 import json
 from pathlib import Path
 import sys
@@ -17,7 +18,8 @@ APP = Path(__file__).resolve().parents[2] / "apps/finops_dashboard"
 sys.path.insert(0, str(APP))
 
 from formatting import (  # noqa: E402
-    SAVINGS_DETAIL_COLUMNS, chart_layout, financial_table, integer, money, percent,
+    SAVINGS_DETAIL_COLUMNS, chart_layout, column_label, comparison_state,
+    financial_table, integer, money, percent,
     savings_detail_table,
 )
 from data_access import DatabricksDataSource  # noqa: E402
@@ -46,6 +48,24 @@ class DashboardPresentationTests(unittest.TestCase):
         st.cache_data.clear()
         st.cache_resource.clear()
 
+    def test_native_navigation_and_app_surfaces_keep_streamlit_theme(self):
+        # Native navigation moves into the sidebar on small screens. Its text
+        # and background must come from the same theme, including live switches.
+        tree = ast.parse((APP / "app.py").read_text())
+        styles = [node.value for node in ast.walk(tree)
+                  if isinstance(node, ast.Constant) and isinstance(node.value, str)
+                  and "<style>" in node.value]
+        self.assertEqual(len(styles), 1)
+        css = styles[0]
+        for selector in (".stApp", "stSidebar", "stHeader", "stTopNav",
+                         "stSidebarNav"):
+            self.assertNotIn(selector, css)
+        self.assertNotIn("!important", css)
+        self.assertNotIn("st.context.theme", (APP / "app.py").read_text())
+        self.assertIn('[data-testid="stMetricLabel"] { color:inherit; }', css)
+        self.assertIn(".architecture-card h4 { color:inherit;", css)
+        self.assertIn(".finops-subtitle { color:inherit;", css)
+
     def test_european_metrics_include_negative_values_and_signed_change(self):
         self.assertEqual(money(Decimal("912000")), "912\u202f000,00 €")
         self.assertEqual(money(-1234.5), "-1\u202f234,50 €")
@@ -69,8 +89,53 @@ class DashboardPresentationTests(unittest.TestCase):
         self.assertIn("164\u202f145", html)
         self.assertIn("000123", html)
         self.assertIn("—", html)
-        pd.testing.assert_frame_equal(styled.data, original)
+        self.assertEqual(list(styled.data.columns),
+                         ["Total Billed Cost", "Resource Count", "Subscription ID"])
+        pd.testing.assert_frame_equal(styled.data.set_axis(original.columns, axis=1), original)
         pd.testing.assert_frame_equal(frame, original)
+
+    def test_column_headers_are_readable_and_keep_acronyms(self):
+        for key, label in {
+            "service_name": "Service Name", "billing_month": "Billing Month",
+            "sku_id": "SKU ID", "run_id": "Run ID",
+            "application_owner_email": "Application Owner Email",
+            "critical_completeness_rate": "Critical Completeness Rate",
+            "average_cost_per_resource": "Average by Resource",
+            "Certified Source": "Certified Source", "KPI": "KPI",
+        }.items():
+            with self.subTest(column=key):
+                self.assertEqual(column_label(key), label)
+
+    def test_comparison_color_requires_a_positive_benefit(self):
+        for value, expected in [(Decimal("12.50"), "positive"), (-12.5, "negative"),
+                                (0, "neutral"), (None, "neutral"),
+                                (float("nan"), "neutral")]:
+            with self.subTest(value=value):
+                self.assertEqual(comparison_state(value), expected)
+
+    def test_comparison_tile_selects_only_its_own_color_scope(self):
+        # Exercise the actual UI helper without initializing a cloud connection.
+        tree = ast.parse((APP / "app.py").read_text())
+        helper = next(node for node in tree.body
+                      if isinstance(node, ast.FunctionDef) and node.name == "catalog_price_metric")
+        prefix = (
+            f"import sys\nsys.path.insert(0, {str(APP)!r})\n"
+            "import streamlit as st\nimport pandas as pd\n"
+            "from formatting import comparison_state, money\n"
+        )
+        for value, state, rendered in [(12.5, "positive", "12,50 €"),
+                                       (-12.5, "negative", "-12,50 €"),
+                                       (0, "neutral", "0,00 €"),
+                                       (None, "neutral", "—")]:
+            with self.subTest(value=value):
+                app = AppTest.from_string(
+                    prefix + ast.unparse(helper) +
+                    f"\ncatalog_price_metric(st.columns(1)[0], {value!r})\n"
+                ).run()
+                self.assertFalse(app.exception)
+                self.assertEqual(app.metric[0].value, rendered)
+                ids = [block.proto.id for block in app.get("flex_container")]
+                self.assertTrue(any(f"catalog_price_comparison_{state}" in key for key in ids))
 
     def test_chart_separators_and_cost_axes(self):
         figure = px.bar(x=["2025-01"], y=[912000], labels={"y": "Cost (€)"})
@@ -268,6 +333,13 @@ class DashboardPresentationTests(unittest.TestCase):
             self.assertEqual(app.metric[0].value, "912\u202f000,00 €")
             self.assertEqual(app.metric[0].delta, "+2,50 % MoM")
             self.assertEqual(app.metric[4].value, "164\u202f145")
+            self.assertEqual([metric.label for metric in app.metric], [
+                "Billed Cost", "Effective Cost", "Savings vs. Catalog Price",
+                "Catalog Price Difference Rate", "Charge Lines", "Active Resources",
+                "Consumed Services", "Average by Resource",
+            ])
+            self.assertEqual(app.metric[2].value, "189\u202f234,20 €")
+            self.assertIn("List Cost − Effective Cost", app.metric[2].proto.help)
             self.assertIn('"type":"category"', app.get("plotly_chart")[1].proto.spec)
             titles = ["Executive Overview", "Cost Drivers", "Savings",
                       "Allocation & Accountability", "Resources", "Operations & Quality",
@@ -283,6 +355,8 @@ class DashboardPresentationTests(unittest.TestCase):
                     ):
                         app = AppTest.from_file(str(APP / "app.py"), default_timeout=30).run()
                         self.assertFalse(app.exception)
+                        for table in app.dataframe:
+                            self.assertFalse(any("_" in column for column in table.value.columns))
                         if title == "Savings":
                             self.assertEqual(app.metric[3].label, "Realized Savings")
                             self.assertEqual(app.metric[3].value, "189\u202f234,20 €")
@@ -341,6 +415,12 @@ class DashboardPresentationTests(unittest.TestCase):
             self.assertFalse(app.exception)
             self.assertEqual(app.metric[0].value, "360,00 €")
             self.assertEqual(app.metric[3].value, "20,00 %")
+            self.assertEqual(app.metric[2].label, "Savings vs. Catalog Price")
+            self.assertEqual(app.metric[2].value, "90,00 €")
+            self.assertEqual(list(app.dataframe[0].value.columns), [
+                "Billing Month", "Billed Cost", "Effective Cost",
+                "List Cost", "Savings vs. Catalog Price", "Charge Lines",
+            ])
             app.sidebar.selectbox(key="overview_view").set_value("Year-over-year").run()
             self.assertFalse(app.exception)
             self.assertEqual(app.metric[0].delta, "+20,00 % YoY")

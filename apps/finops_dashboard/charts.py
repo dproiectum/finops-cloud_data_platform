@@ -22,7 +22,7 @@ def service_cost_chart(frame: pd.DataFrame, title: str, order: str = "Highest co
         )
     figure = px.bar(
         totals, x="total_billed_cost", y="service_name", orientation="h",
-        title=title, labels={"total_billed_cost": "Billed cost (€)", "service_name": "Service"},
+        title=title, labels={"total_billed_cost": "Billed Cost (€)", "service_name": "Service"},
         color_discrete_sequence=["#0078d4"],
     )
     figure.update_yaxes(
@@ -31,7 +31,7 @@ def service_cost_chart(frame: pd.DataFrame, title: str, order: str = "Highest co
     )
     figure.update_traces(
         customdata=[[money(value)] for value in totals["total_billed_cost"]],
-        hovertemplate="%{y}<br>Billed cost: %{customdata[0]}<extra></extra>",
+        hovertemplate="%{y}<br>Billed Cost: %{customdata[0]}<extra></extra>",
     )
     figure.update_layout(showlegend=False)
     return chart_layout(figure, max(360, min(900, 90 + 24 * len(totals))))
@@ -44,8 +44,8 @@ def charge_cost_chart(frame: pd.DataFrame):
     totals["charge_category"] = totals["charge_category"].fillna("Not specified")
     figure = px.bar(
         totals, x="total_billed_cost", y="charge_category", orientation="h",
-        title="What makes up the bill?",
-        labels={"total_billed_cost": "Billed cost (€)", "charge_category": "Charge category"},
+        title="Billed Cost by Charge Category",
+        labels={"total_billed_cost": "Billed Cost (€)", "charge_category": "Charge Category"},
         color_discrete_sequence=["#0078d4"],
     )
     figure.update_yaxes(
@@ -67,19 +67,19 @@ def cost_bridge(savings: pd.Series):
     negotiated_step = contracted - list_cost
     commitment_step = effective - contracted
     figure = go.Figure(go.Waterfall(
-        x=["List cost", "Negotiated-price effect", "Commitment / allocation effect", "Effective cost"],
+        x=["List Cost", "Negotiated Price Effect", "Commitment / Allocation Effect", "Effective Cost"],
         measure=["absolute", "relative", "relative", "total"],
         y=[list_cost, negotiated_step, commitment_step, 0],
         text=[money(value) for value in (list_cost, negotiated_step, commitment_step, effective)],
         textposition="outside", cliponaxis=False,
         customdata=[money(value) for value in (list_cost, contracted, effective, effective)],
-        hovertemplate="%{x}<br>Step: %{text}<br>Cost after step: %{customdata}<extra></extra>",
+        hovertemplate="%{x}<br>Step: %{text}<br>Cost After Step: %{customdata}<extra></extra>",
         decreasing={"marker": {"color": "#107c10"}},
         increasing={"marker": {"color": "#d97706"}},
         totals={"marker": {"color": "#0078d4"}},
         connector={"line": {"color": "#a19f9d"}},
     ))
-    figure.update_layout(title="From list price to effective cost", yaxis_title="Cost (€)")
+    figure.update_layout(title="From List Price to Effective Cost", yaxis_title="Cost (€)")
     return chart_layout(figure, 420)
 
 

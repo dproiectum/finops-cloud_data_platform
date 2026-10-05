@@ -58,9 +58,9 @@ class DashboardTests(unittest.TestCase):
             "_source_file",
         ):
             self.assertIn(name, content)
-        self.assertIn("List cost − Effective cost", content)
-        self.assertIn("Month-over-month change", content)
-        self.assertIn("Effective cost breakdown", content)
+        self.assertIn("List Cost − Effective Cost", content)
+        self.assertIn("Month-over-Month Change", content)
+        self.assertIn("Effective Cost Breakdown", content)
         self.assertIn("Reservation + Savings Plan + Usage On-Demand + Usage Dynamic + Adjustment", content)
         self.assertNotIn("Commitment difference", content)
 

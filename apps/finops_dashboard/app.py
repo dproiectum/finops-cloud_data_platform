@@ -14,7 +14,7 @@ from charts import (
 )
 from data_access import DatabricksDataSource
 from formatting import (
-    SAVINGS_COMPONENTS, chart_layout, financial_table, integer, money, percent,
+    SAVINGS_COMPONENTS, chart_layout, comparison_state, financial_table, integer, money, percent,
     savings_detail_table,
 )
 from knowledge import cost_formulas, focus_columns, glossary
@@ -36,32 +36,41 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-    :root { --azure:#0078d4; --azure-dark:#005a9e; --surface:#ffffff; --canvas:#f5f5f5; }
-    .stApp { background:#f5f5f5; }
-    [data-testid="stSidebar"] { background:#ffffff; border-right:1px solid #e1dfdd; }
+    /* Keep native app, header and mobile navigation surfaces under Streamlit's
+       theme control. Fixed light backgrounds hide dark-theme navigation text. */
     [data-testid="stMetric"] {
-      background:#ffffff; border:1px solid #e1dfdd; border-radius:6px;
+      background:transparent;
+      border:1px solid color-mix(in srgb, currentColor 25%, transparent);
+      border-radius:6px;
       padding:15px 17px; box-shadow:0 1px 3px rgba(0,0,0,.08);
     }
-    [data-testid="stMetricValue"] { color:#242424; }
-    [data-testid="stMetricLabel"] { color:#605e5c; }
-    h1, h2, h3 { color:#242424 !important; letter-spacing:-.02em; }
-    .finops-kicker { color:#0078d4; font-weight:700; letter-spacing:.11em; font-size:.78rem; }
-    .finops-subtitle { color:#605e5c; margin-top:-.7rem; margin-bottom:1.2rem; }
+    [data-testid="stMetricValue"], [data-testid="stMetricLabel"] { color:inherit; }
+    .st-key-catalog_price_comparison_positive [data-testid="stMetricValue"] { color:#16803d; }
+    .st-key-catalog_price_comparison_negative [data-testid="stMetricValue"] { color:#d83b3b; }
+    h1, h2, h3 { letter-spacing:-.02em; }
+    .finops-kicker { color:inherit; font-weight:700; letter-spacing:.11em; font-size:.78rem; }
+    .finops-subtitle { color:inherit; margin-top:-.7rem; margin-bottom:1.2rem; }
     .status-pill {
       display:inline-block; padding:.3rem .65rem; border-radius:999px;
       color:#005a9e; background:#eff6fc; border:1px solid #c7e0f4; font-size:.82rem;
     }
     .architecture-card {
-      background:#ffffff; border:1px solid #e1dfdd; border-top:4px solid #0078d4;
+      background:transparent; color:inherit;
+      border:1px solid color-mix(in srgb, currentColor 25%, transparent);
+      border-top:4px solid #0078d4;
       border-radius:6px; padding:18px; min-height:132px;
       box-shadow:0 1px 3px rgba(0,0,0,.06);
     }
-    .architecture-card h4 { color:#242424; margin:0 0 8px 0; }
-    .architecture-card p { color:#605e5c; margin:0; line-height:1.45; }
-    div[data-testid="stPlotlyChart"], div[data-testid="stDataFrame"] {
+    .architecture-card h4 { color:inherit; margin:0 0 8px 0; }
+    .architecture-card p { color:inherit; margin:0; line-height:1.45; }
+    /* Plotly explicitly draws dark text on white in chart_layout(). */
+    div[data-testid="stPlotlyChart"] {
       background:#ffffff; border:1px solid #e1dfdd; border-radius:6px;
       box-shadow:0 1px 3px rgba(0,0,0,.06); padding:4px;
+    }
+    div[data-testid="stDataFrame"] {
+      border:1px solid color-mix(in srgb, currentColor 25%, transparent);
+      border-radius:6px; padding:4px;
     }
     </style>
     """,
@@ -84,7 +93,7 @@ try:
     identity = None
     if mode == "demo":
         st.sidebar.warning("Local synthetic authorization test — not authentication")
-        persona = st.sidebar.selectbox("Demo identity", DEMO_PERSONAS, key="demo_identity")
+        persona = st.sidebar.selectbox("Demo Identity", DEMO_PERSONAS, key="demo_identity")
         identity = demo_identity(persona)
     elif mode == "iap":
         identity = iap_identity(st.context.headers, os.environ["FINOPS_IAP_AUDIENCE"].strip())
@@ -145,6 +154,17 @@ def page_title(kicker: str, title: str, subtitle: str | None = None) -> None:
         st.markdown(f'<div class="finops-subtitle">{subtitle}</div>', unsafe_allow_html=True)
 
 
+def catalog_price_metric(column, value: object) -> None:
+    with column.container(key=f"catalog_price_comparison_{comparison_state(value)}"):
+        st.metric(
+            "Savings vs. Catalog Price",
+            "—" if value is None or pd.isna(value) else money(value),
+            help="List Cost − Effective Cost. A positive amount means effective cost is "
+                 "below catalog (list) cost; a negative amount means it is above. "
+                 "This price comparison is not proof of cash savings.",
+        )
+
+
 def knowledge_page() -> None:
     page_title("FINOPS · FOCUS · GOVERNANCE", "Knowledge Base")
     st.write(
@@ -153,10 +173,10 @@ def knowledge_page() -> None:
         "and project demonstrations."
     )
     formula_tab, columns_tab, glossary_tab, lifecycle_tab = st.tabs(
-        ["Cost formulas", "FOCUS columns", "FinOps glossary", "Operating lifecycle"]
+        ["Cost Formulas", "FOCUS Columns", "FinOps Glossary", "Operating Lifecycle"]
     )
     with formula_tab:
-        st.subheader("Cost and KPI formulas")
+        st.subheader("Cost and KPI Formulas")
         st.dataframe(cost_formulas(), hide_index=True, width="stretch")
         st.warning(
             "ListCost − EffectiveCost is a technical price comparison. It must not be "
@@ -169,10 +189,10 @@ def knowledge_page() -> None:
             "cost exceeds list cost; it is not hidden or forced to zero."
         )
     with columns_tab:
-        st.subheader("FOCUS and platform column dictionary")
+        st.subheader("FOCUS and Platform Column Dictionary")
         dictionary = focus_columns()
         families = ["All", *sorted(dictionary["Family"].unique())]
-        family = st.selectbox("Column family", families)
+        family = st.selectbox("Column Family", families)
         if family != "All":
             dictionary = dictionary[dictionary["Family"] == family]
         st.dataframe(dictionary, hide_index=True, width="stretch")
@@ -181,7 +201,7 @@ def knowledge_page() -> None:
             "columns begin with an underscore. Azure extensions begin with x_."
         )
     with glossary_tab:
-        st.subheader("Terms used by the dashboard")
+        st.subheader("Terms Used by the Dashboard")
         st.dataframe(glossary(), hide_index=True, width="stretch")
     with lifecycle_tab:
         columns = st.columns(3)
@@ -215,17 +235,17 @@ def executive_page(month: str) -> None:
         delta = f"{percent(summary['month_change_rate'], signed=True)} MoM"
 
     primary = st.columns(4)
-    primary[0].metric("Billed cost", money(summary["billed_cost"]), delta=delta)
-    primary[1].metric("Effective cost", money(summary["effective_cost"]))
-    primary[2].metric("Difference vs list", money(summary["savings_vs_list"]))
-    primary[3].metric("Difference rate", percent(savings["savings_rate"]))
+    primary[0].metric("Billed Cost", money(summary["billed_cost"]), delta=delta)
+    primary[1].metric("Effective Cost", money(summary["effective_cost"]))
+    catalog_price_metric(primary[2], summary["savings_vs_list"])
+    primary[3].metric("Catalog Price Difference Rate", percent(savings["savings_rate"]))
 
     secondary = st.columns(4)
-    secondary[0].metric("Charge lines", integer(summary["charge_lines"]))
-    secondary[1].metric("Active resources", integer(summary["resources"]))
-    secondary[2].metric("Consumed services", integer(summary["services"]))
+    secondary[0].metric("Charge Lines", integer(summary["charge_lines"]))
+    secondary[1].metric("Active Resources", integer(summary["resources"]))
+    secondary[2].metric("Consumed Services", integer(summary["services"]))
     secondary[3].metric(
-        "Average / resource", money(summary["average_cost_per_resource"])
+        "Average by Resource", money(summary["average_cost_per_resource"])
     )
 
     daily = load_frame(queries.daily_trend(config, month))
@@ -236,8 +256,8 @@ def executive_page(month: str) -> None:
             daily,
             x="date",
             y="daily_billed_cost",
-            title="Daily billed cost",
-            labels={"date": "Date", "daily_billed_cost": "Billed cost (€)"},
+            title="Daily Billed Cost",
+            labels={"date": "Date", "daily_billed_cost": "Billed Cost (€)"},
             color_discrete_sequence=["#0078d4"],
         )
         figure.update_traces(line=dict(width=2), fillcolor="rgba(0,120,212,.16)")
@@ -247,8 +267,8 @@ def executive_page(month: str) -> None:
             monthly,
             x="billing_month",
             y="monthly_billed_cost",
-            title="Monthly billed-cost trend",
-            labels={"billing_month": "Month", "monthly_billed_cost": "Billed cost (€)"},
+            title="Monthly Billed Cost Trend",
+            labels={"billing_month": "Month", "monthly_billed_cost": "Billed Cost (€)"},
             color_discrete_sequence=["#00a4ef"],
         )
         figure.update_xaxes(type="category")
@@ -291,10 +311,10 @@ def executive_annual_page(year: str, other_year: str | None = None) -> None:
         else:
             st.caption("YoY percentage is unavailable because the comparison-year billed cost is zero.")
     cards = st.columns(4)
-    cards[0].metric("Billed cost", money(billed), delta=change)
-    cards[1].metric("Effective cost", money(effective))
-    cards[2].metric("Difference vs list", money(difference))
-    cards[3].metric("Difference rate", percent(rate))
+    cards[0].metric("Billed Cost", money(billed), delta=change)
+    cards[1].metric("Effective Cost", money(effective))
+    catalog_price_metric(cards[2], difference)
+    cards[3].metric("Catalog Price Difference Rate", percent(rate))
     st.caption(
         f"Charge lines: {integer(annual['charge_lines'].sum())} · Loaded months: {len(annual)}. "
         "Monthly resource and service counts are not summed into annual distinct counts."
@@ -305,8 +325,8 @@ def executive_annual_page(year: str, other_year: str | None = None) -> None:
         ], ignore_index=True)
         figure = px.bar(
             chart_frame, x="month_number", y="billed_cost", color="year", barmode="group",
-            title="Billed cost: same months, two years",
-            labels={"month_number": "Month number", "billed_cost": "Billed cost (€)", "year": "Year"},
+            title="Billed Cost: Same Months, Two Years",
+            labels={"month_number": "Month Number", "billed_cost": "Billed Cost (€)", "year": "Year"},
             color_discrete_sequence=["#0078d4", "#8a8886"],
         )
         figure.update_xaxes(type="category", categoryorder="array", categoryarray=common)
@@ -314,8 +334,8 @@ def executive_annual_page(year: str, other_year: str | None = None) -> None:
                      hide_index=True, width="stretch")
     else:
         figure = px.bar(
-            annual, x="billing_month", y="billed_cost", title="Billed cost by loaded month",
-            labels={"billing_month": "Month", "billed_cost": "Billed cost (€)"},
+            annual, x="billing_month", y="billed_cost", title="Billed Cost by Loaded Month",
+            labels={"billing_month": "Month", "billed_cost": "Billed Cost (€)"},
             color_discrete_sequence=["#0078d4"],
         )
         figure.update_xaxes(type="category")
@@ -335,13 +355,13 @@ def cost_drivers_page(month: str) -> None:
             float(summary["billed_cost"])
         )
     cards = st.columns(3)
-    cards[0].metric("Services represented", integer(len(services)))
-    cards[1].metric("Top-service share", percent(leading_share))
-    cards[2].metric("Displayed service cost", money(service_total))
+    cards[0].metric("Services Represented", integer(len(services)))
+    cards[1].metric("Top Service Share", percent(leading_share))
+    cards[2].metric("Displayed Service Cost", money(service_total))
 
     left, right = st.columns(2)
     with left:
-        st.plotly_chart(service_cost_chart(services, "Which services drive the bill?"),
+        st.plotly_chart(service_cost_chart(services, "Billed Cost by Service"),
                         width="stretch")
         st.caption("One bar per service; highest billed cost first. Only the top 20 are shown.")
     with right:
@@ -353,7 +373,7 @@ def cost_drivers_page(month: str) -> None:
         )
 
     service_tab, sku_tab, charge_tab = st.tabs(
-        ["Portfolio services", "Portfolio SKUs", "Charge details"]
+        ["Portfolio Services", "Portfolio SKUs", "Charge Details"]
     )
     with service_tab:
         st.caption("Cumulative view across all loaded months")
@@ -458,19 +478,19 @@ def allocation_page(month: str) -> None:
     total = center_cost.sum()
     coverage = 0 if total == 0 else 100 * float(allocated) / abs(float(total))
     cards = st.columns(3)
-    cards[0].metric("Cost-center coverage", percent(coverage))
+    cards[0].metric("Cost Center Coverage", percent(coverage))
     cards[1].metric("Subscriptions", integer(len(subscriptions)))
-    cards[2].metric("Application-owner rows", integer(len(owners)))
+    cards[2].metric("Application Owner Rows", integer(len(owners)))
 
     service_tab, center_tab, subscription_tab, owner_tab = st.tabs(
-        ["Services", "Cost centers", "Subscriptions", "Application owners"]
+        ["Services", "Cost Centers", "Subscriptions", "Application Owners"]
     )
     with service_tab:
         order = st.selectbox(
-            "Service order", ["Highest cost first", "Lowest cost first", "Name A–Z"],
+            "Service Order", ["Highest cost first", "Lowest cost first", "Name A–Z"],
             key="service_order",
         )
-        st.plotly_chart(service_cost_chart(services, "Billed cost by service", order),
+        st.plotly_chart(service_cost_chart(services, "Billed Cost by Service", order),
                         width="stretch")
         st.caption("One color and one bar per service; this view shows the top 30 services by cost.")
     with center_tab:
@@ -479,8 +499,8 @@ def allocation_page(month: str) -> None:
             # represent negative values; retain them as signed bars instead.
             figure = px.bar(
                 centers.sort_values("total_billed_cost"), x="total_billed_cost", y="cost_center",
-                orientation="h", title="Cost-center allocation",
-                labels={"total_billed_cost": "Billed cost (€)", "cost_center": "Cost center"},
+                orientation="h", title="Cost Center Allocation",
+                labels={"total_billed_cost": "Billed Cost (€)", "cost_center": "Cost Center"},
                 color_discrete_sequence=["#0078d4"],
             )
             st.caption("Signed bars retain credits and non-positive cost-center totals.")
@@ -491,12 +511,12 @@ def allocation_page(month: str) -> None:
                 values="total_billed_cost",
                 color="total_billed_cost",
                 color_continuous_scale=["#deecf9", "#71afe5", "#0078d4", "#005a9e"],
-                title="Cost-center allocation",
-                labels={"total_billed_cost": "Billed cost (€)", "cost_center": "Cost center"},
+                title="Cost Center Allocation",
+                labels={"total_billed_cost": "Billed Cost (€)", "cost_center": "Cost Center"},
             )
             figure.update_traces(
                 customdata=[[money(value)] for value in figure.data[0].values],
-                hovertemplate="%{label}<br>Billed cost: %{customdata[0]}<extra></extra>",
+                hovertemplate="%{label}<br>Billed Cost: %{customdata[0]}<extra></extra>",
             )
             figure.update_coloraxes(colorbar_tickformat=",.0f")
         st.plotly_chart(chart_layout(figure, 520), width="stretch")
@@ -516,11 +536,11 @@ def resources_page(month: str) -> None:
     top_five = resource_cost.head(5).sum()
     concentration = 0 if total == 0 else 100 * float(top_five) / abs(float(total))
     cards = st.columns(3)
-    cards[0].metric("Resources displayed", integer(len(resources)))
-    cards[1].metric("Top-5 concentration", percent(concentration))
-    cards[2].metric("Resource groups", integer(len(groups)))
+    cards[0].metric("Resources Displayed", integer(len(resources)))
+    cards[1].metric("Top 5 Concentration", percent(concentration))
+    cards[2].metric("Resource Groups", integer(len(groups)))
     resource_tab, group_tab, portfolio_tab = st.tabs(
-        ["Resources", "Resource groups", "Portfolio totals"]
+        ["Resources", "Resource Groups", "Portfolio Totals"]
     )
     with resource_tab:
         figure = px.bar(
@@ -529,8 +549,8 @@ def resources_page(month: str) -> None:
             y="resource_name",
             orientation="h",
             color="region",
-            title="Top resources by cost",
-            labels={"total_billed_cost": "Cost (€)", "resource_name": "Resource"},
+            title="Top Resources by Cost",
+            labels={"total_billed_cost": "Cost (€)", "resource_name": "Resource", "region": "Region"},
         )
         st.plotly_chart(chart_layout(figure, 560), width="stretch")
         st.dataframe(financial_table(resources), hide_index=True, width="stretch")
@@ -540,8 +560,8 @@ def resources_page(month: str) -> None:
             x="total_billed_cost",
             y="resource_group_name",
             orientation="h",
-            title="Cost by resource group",
-            labels={"total_billed_cost": "Cost (€)", "resource_group_name": "Resource group"},
+            title="Cost by Resource Group",
+            labels={"total_billed_cost": "Cost (€)", "resource_group_name": "Resource Group"},
             color_discrete_sequence=["#0078d4"],
         )
         st.plotly_chart(chart_layout(figure, 560), width="stretch")
@@ -573,28 +593,28 @@ def operations_page(month: str) -> None:
         "Unavailable" if reconciliations.empty else str(reconciliations.iloc[0]["status"])
     )
     cards = st.columns(4)
-    cards[0].metric("Critical completeness", percent(quality["critical_completeness_rate"]))
-    cards[1].metric("Latest pipeline", latest_status)
-    cards[2].metric("Latest reconciliation", latest_reconciliation)
-    cards[3].metric("Batches in month", integer(quality["batches"]))
+    cards[0].metric("Critical Completeness", percent(quality["critical_completeness_rate"]))
+    cards[1].metric("Latest Pipeline", latest_status)
+    cards[2].metric("Latest Reconciliation", latest_reconciliation)
+    cards[3].metric("Batches in Month", integer(quality["batches"]))
 
     quality_tab, runs_tab, reconciliation_tab, environments_tab = st.tabs(
-        ["Data quality", "Pipeline runs", "Reconciliation", "DEV / PROD separation"]
+        ["Data Quality", "Pipeline Runs", "Reconciliation", "DEV / PROD Separation"]
     )
     with quality_tab:
         controls = pd.DataFrame(
             [
-                ("Rows checked", quality["total_rows"]),
-                ("Missing BilledCost", quality["billed_cost_nulls"]),
-                ("Missing currency", quality["currency_nulls"]),
-                ("Missing service", quality["service_nulls"]),
+                ("Rows Checked", quality["total_rows"]),
+                ("Missing Billed Cost", quality["billed_cost_nulls"]),
+                ("Missing Currency", quality["currency_nulls"]),
+                ("Missing Service", quality["service_nulls"]),
             ],
             columns=["Control", "Value"],
         )
         st.dataframe(financial_table(controls), hide_index=True, width="stretch")
         st.write(f"Latest Silver publication: **{quality['latest_silver_load']}**")
     with runs_tab:
-        st.dataframe(runs, hide_index=True, width="stretch")
+        st.dataframe(financial_table(runs), hide_index=True, width="stretch")
     with reconciliation_tab:
         st.dataframe(financial_table(reconciliations), hide_index=True, width="stretch")
     with environments_tab:
@@ -607,7 +627,7 @@ def operations_page(month: str) -> None:
 def architecture_page() -> None:
     page_title("DATA PLATFORM · ARCHITECTURE", "Architecture & Lineage")
     lineage_tab, layers_tab, products_tab = st.tabs(
-        ["Data lineage", "Medallion layers", "Certified products"]
+        ["Data Lineage", "Medallion Layers", "Certified Products"]
     )
     with lineage_tab:
         labels = [
@@ -619,7 +639,7 @@ def architecture_page() -> None:
             "Gold",
             "Datamarts",
             "Streamlit",
-            "OPS audit",
+            "OPS Audit",
         ]
         links = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7), (2, 8), (4, 8), (5, 8)]
         figure = go.Figure(
@@ -697,7 +717,7 @@ def architecture_page() -> None:
                     ("Quality", "dm_data_quality_monthly", "Completeness and freshness"),
                     ("Operations", "finops_ops.audit.*", "Runs, snapshots and reconciliation"),
                 ],
-                columns=["Subject", "Certified source", "Purpose"],
+                columns=["Subject", "Certified Source", "Purpose"],
             ),
             hide_index=True,
             width="stretch",
@@ -755,18 +775,18 @@ with st.sidebar:
             st.warning("No billing month is available")
             st.stop()
         years = sorted({month[:4] for month in months}, reverse=True)
-        selected_year = st.selectbox("Billing year", years, key="billing_year")
+        selected_year = st.selectbox("Billing Year", years, key="billing_year")
         if navigation.title == "Executive Overview":
             views = ["Monthly", "Annual"]
             if len(years) > 1:
                 views.append("Year-over-year")
-            overview_view = st.selectbox("Overview view", views, key="overview_view")
+            overview_view = st.selectbox("Overview View", views, key="overview_view")
         if overview_view == "Monthly":
             year_months = [month for month in months if month.startswith(f"{selected_year}-")]
-            selected_month = st.selectbox("Billing month", year_months, key="billing_month")
+            selected_month = st.selectbox("Billing Month", year_months, key="billing_month")
         elif overview_view == "Year-over-year":
             comparison_year = st.selectbox(
-                "Compare with year", [year for year in years if year != selected_year],
+                "Compare with Year", [year for year in years if year != selected_year],
                 key="comparison_year",
             )
     st.divider()
