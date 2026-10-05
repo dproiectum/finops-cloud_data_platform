@@ -145,6 +145,11 @@ persona selector is not production authentication.
 
 ### Planned implementation and thesis evidence
 
+Manual metadata scripts are available under `platform/common/sql/security/`.
+They seed two confirmed PROD application scopes and three synthetic demo
+entitlements only. They do not implement viewer authentication or authorization,
+and no Cloud Run deployment is needed to execute them in SQL Editor.
+
 1. Confirm the application/project/domain keys and the hierarchy used for scopes.
    The owner datamart retains `application_code`; the scope/service datamart does
    not, and the executive and savings datamarts are global monthly aggregates.

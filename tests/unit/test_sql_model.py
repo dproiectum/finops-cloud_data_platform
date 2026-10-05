@@ -86,6 +86,56 @@ class SqlModelTests(unittest.TestCase):
         fact_load = sql_text("gold/data_loading/30_replace_fact_month.sql")
         self.assertIn("REPLACE WHERE billing_month = '{billing_month}'", fact_load)
 
+    def test_security_metadata_setup_matches_manual_tables(self):
+        ddl = sql_text("security/01_create_security_tables.sql")
+        self.assertEqual(len(split_statements(ddl)), 3)
+        self.assertEqual(ddl.count("CREATE TABLE IF NOT EXISTS"), 2)
+        self.assertIn("finops_ops.security.user_entitlement", ddl)
+        self.assertIn("finops_ops.security.business_scope", ddl)
+        for column in ("identity_provider", "principal_id", "environment", "scope_id"):
+            self.assertIn(column, ddl)
+        self.assertNotIn("LOCATION", ddl)
+        self.assertNotIn("CREATE OR REPLACE", ddl)
+
+    def test_demo_seed_is_insert_only_and_explicitly_synthetic(self):
+        seed = sql_text("security/02_load_demo_assignments.sql")
+        statements = split_statements(seed)
+        self.assertEqual(len(statements), 5)
+        self.assertTrue(all("assert_true(" in statement for statement in statements[:3]))
+        merges = statements[3:]
+        self.assertTrue(all("MERGE INTO" in statement for statement in merges))
+        self.assertTrue(all("WHEN NOT MATCHED THEN INSERT" in statement for statement in merges))
+        self.assertTrue(all("WHEN MATCHED" not in statement for statement in merges))
+        self.assertIn("'demo' AS identity_provider", merges[1])
+        self.assertIn("'prod' AS environment", merges[1])
+        for principal in ("demo-finops-admin", "demo-app-owner-a", "demo-app-owner-b"):
+            self.assertIn(f"'{principal}'", merges[1])
+        self.assertNotIn("'demo-no-access'", merges[1])
+        self.assertNotIn("application_owner_email", merges[1])
+        for code in ("APP00013057", "BSN0003965"):
+            self.assertIn(f"'{code}'", seed)
+
+    def test_demo_controls_do_not_claim_dashboard_enforcement(self):
+        controls = sql_text("security/03_validate_demo_assignments.sql")
+        self.assertEqual(len(split_statements(controls)), 8)
+        self.assertEqual(controls.count("assert_true("), 5)
+        self.assertIn("actual.valid_from <= CURRENT_TIMESTAMP()", controls)
+        self.assertIn("actual.valid_to > CURRENT_TIMESTAMP()", controls)
+        self.assertIn("demo-no-access", controls)
+        self.assertIn("PASS: demo metadata only; dashboard enforcement is not implemented", controls)
+        self.assertNotIn("MERGE INTO", controls)
+
+    def test_security_scripts_are_packaged_without_placeholders(self):
+        settings = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+        package_files = settings["tool"]["setuptools"]["data-files"]
+        self.assertIn("share/finops_cloud/sql/security", package_files)
+        for filename in (
+            "01_create_security_tables.sql",
+            "02_load_demo_assignments.sql",
+            "03_validate_demo_assignments.sql",
+        ):
+            self.assertEqual(placeholders(sql_text(f"security/{filename}")), set())
+
     def test_all_datamarts_are_rebuilt_instead_of_appended(self):
         for relative_path in DATAMART_SCRIPTS:
             self.assertIn("CREATE OR REPLACE TABLE", sql_text(relative_path))
