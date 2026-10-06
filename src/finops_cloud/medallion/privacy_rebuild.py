@@ -16,11 +16,66 @@ from finops_cloud.medallion.privacy_repair import (
     money_snapshot, plan_table, quoted_table, source_volume_uri,
 )
 from finops_cloud.pipelines.billing_backfill import month_range
+from finops_cloud.sql.runner import render_sql, split_statements, table_context
 
 BELGIUM_METASTORE = 'gcp:europe-west1:59a04d75-f8cd-4538-a893-9fa79922e4bb'
 WORKSPACE_USERS = Path('/Workspace/Users')
-STAGES = ('plan', 'reset', 'monthly', 'daily', 'validate')
+STAGES = ('plan', 'reset', 'monthly', 'daily', 'validate', 'recover_charge_schema')
 FORMAT = 'finops-business-rebuild-v1'
+
+
+def _charge_schema_plan(spark, config):
+    """Recognize only the known legacy attribute, never arbitrary schema drift."""
+    expected = {
+        config.table('dim_charge_type', 'gold'):
+            {'charge_type_sk', 'charge_category', 'charge_frequency'},
+        config.table('dm_cost_by_charge_type', 'datamart'):
+            {'billing_month', 'charge_category', 'charge_frequency', 'total_billed_cost'},
+    }
+    legacy = []
+    for table, columns in expected.items():
+        actual = set(spark.table(table).columns)
+        if actual == columns | {'charge_subcategory'}:
+            legacy.append(table)
+        elif actual != columns:
+            raise ValueError(f'Unexpected charge schema; inspect before reset: {table}')
+    return legacy
+
+
+def _repair_empty_charge_schema(spark, config, legacy):
+    """Use the SQL-owned schemas only after the business reset has left them empty."""
+    if not legacy:
+        return
+    dimension = config.table('dim_charge_type', 'gold')
+    mart = config.table('dm_cost_by_charge_type', 'datamart')
+    fact = config.table('fact_cost_usage', 'gold')
+    for table in (dimension, mart, fact):
+        if spark.table(table).limit(1).count():
+            raise ValueError('Charge schema replacement requires empty dimension, fact and mart')
+    values = table_context(config)
+    if dimension in legacy:
+        ddl = render_sql('gold/table_creation/00_create_gold_tables.sql', values)
+        prefix = f'CREATE TABLE IF NOT EXISTS {dimension} ('
+        matches = [s for s in split_statements(ddl) if s.startswith(prefix)]
+        if len(matches) != 1:
+            raise ValueError('Cannot locate the SQL-owned charge dimension definition')
+        replacement = matches[0].replace('CREATE TABLE IF NOT EXISTS', 'CREATE OR REPLACE TABLE', 1)
+        spark.sql(replacement).collect()
+    if mart in legacy:
+        spark.sql(render_sql('datamarts/table_refresh/06_dm_cost_by_charge_type.sql', values)).collect()
+    if _charge_schema_plan(spark, config):
+        raise ValueError('Legacy charge schema remains; keep maintenance paused')
+
+
+def _reset_business(spark, config, names):
+    legacy = _charge_schema_plan(spark, config)  # Refuse unknown drift BEFORE truncation.
+    for name in reversed(names):
+        spark.sql(f'TRUNCATE TABLE {quoted_table(name)}').collect()
+    for name in names:
+        if spark.table(name).limit(1).count():
+            raise ValueError('Reset did not leave every business table empty')
+    _repair_empty_charge_schema(spark, config, legacy)
+    return legacy
 
 
 def validate_scope(config):
@@ -217,6 +272,79 @@ def _validate(spark, config, state):
         raise ValueError('Known privacy patterns remain in scope labels')
 
 
+def _recover_first_month_charge_schema(spark, config, path, state, *, confirmation,
+                                      jobs_paused, dashboard_paused, sources_verified):
+    """Explicit restart of the diagnosed first-month failure, not a generic retry.
+
+    Keep the original baseline/recovery versions. Discard only the partial first
+    month by repeating the business reset, then repair the two empty schemas.
+    OPS failure events and security assignments are never cleared.
+    """
+    if (state['status'] != 'FAILED' or state.get('failed_stage') != 'monthly'
+            or state['completed'] != ['reset'] or state['monthly_done'] or state['daily_done']
+            or state.get('charge_schema_recovery')):
+        raise ValueError('Recovery is limited to the first monthly failure after reset')
+    if (confirmation != f'RECOVER_{config.environment.upper()}_FIRST_MONTH_CHARGE_SCHEMA'
+            or jobs_paused is not True or dashboard_paused is not True
+            or sources_verified is not True):
+        raise ValueError('Exact recovery confirmation and all maintenance acknowledgements required')
+    dimension = config.table('dim_charge_type', 'gold')
+    legacy = _charge_schema_plan(spark, config)
+    if dimension not in legacy:
+        raise ValueError('The diagnosed legacy charge dimension is not present')
+    empty = [config.table(key, layer) for key, layer in (
+        ('bronze_daily', 'bronze'), ('dim_charge_type', 'gold'),
+        ('dim_tag', 'gold'), ('bridge_resource_tag', 'gold'), ('fact_cost_usage', 'gold'))]
+    empty.extend(t for t in state['tables'] if '.datamart.' in t)
+    if any(spark.table(t).limit(1).count() for t in empty):
+        raise ValueError('Recovery refused: facts, tags, daily Bronze or datamarts contain rows')
+    first = state['sources']['monthly'][0]
+    wanted = {'monthly': [first], 'daily': []}
+    for key in ('silver_canonical', 'silver_central'):
+        if source_manifest(_lineage(spark, config.table(key, 'silver')), config,
+                           [first['month']]) != wanted:
+            raise ValueError('Recovery refused: Silver is not limited to the first planned monthly source')
+    bronze_sources = spark.table(config.table('bronze_billing', 'bronze')).select(
+        '_source_file', '_source_type').distinct().collect()
+    if not bronze_sources or any(
+            r['_source_type'] != 'MONTHLY_BILLING'
+            or source_volume_uri(r['_source_file'], config) != first['uri']
+            for r in bronze_sources):
+        raise ValueError('Recovery refused: billing Bronze is not limited to the first planned source')
+    _assert_managed(spark, state['tables'])
+    _guard_daily_status(spark, config, state['sources'])
+    current = _versions(spark, state['expected_versions'])
+    if any(current[t] != old for t, old in state['expected_versions'].items()
+           if t not in state['tables']):
+        raise ValueError('Security metadata changed; schema recovery refused')
+    # Preserve the failed checkpoint as a separate private file BEFORE any writes.
+    backup = path.with_name(f'rebuild_{config.environment}.before-charge-schema-recovery.json')
+    if backup.exists():
+        raise ValueError('Recovery backup already exists; preserve it and diagnose')
+    _save(backup, dict(state))
+    state['charge_schema_recovery'] = {'status': 'RUNNING', 'backup': str(backup),
+                                       'before_versions': current, 'tables': legacy}
+    state['status'] = 'RUNNING'
+    _save(path, state)
+    try:
+        # Detect a race since the checks above, without accepting security changes.
+        if _versions(spark, current) != current:
+            raise ValueError('Tables changed during recovery checks; stop and diagnose')
+        _reset_business(spark, config, state['tables'])
+        _checkpoint_versions(spark, state)
+        state['charge_schema_recovery']['status'] = 'PASS'
+        state['status'] = 'STAGE_PASS'
+        state.pop('failed_stage', None)
+        _save(path, state)
+        return {**_summary(state), 'recovery': 'CHARGE_SCHEMA_REPAIRED', 'next_stage': 'monthly'}
+    except Exception:
+        state['status'] = 'FAILED'
+        state['failed_stage'] = 'recover_charge_schema'
+        state['charge_schema_recovery']['status'] = 'FAILED'
+        _save(path, state)
+        raise
+
+
 def run_stage(spark, config, state_file, *, stage='plan', start_month='2025-01',
               end_month='2026-06', confirmation='', jobs_paused=False,
               dashboard_paused=False, sources_verified=False):
@@ -237,8 +365,6 @@ def run_stage(spark, config, state_file, *, stage='plan', start_month='2025-01',
                 or state.get('metastore') != metastore or state.get('tables') != list(names)
                 or state.get('months') != months):
             raise ValueError('Checkpoint belongs to a different rebuild scope')
-        if state['status'] in {'FAILED', 'RUNNING'}:
-            raise ValueError('Previous stage failed/interrupted; preserve checkpoint and diagnose, no blind retry')
         if set(state['expected_versions']) != set((*names, *security)):
             raise ValueError('Checkpoint table inventory changed')
         stored_rows = [dict(billing_month=item['month'], _source_type=kind,
@@ -247,6 +373,13 @@ def run_stage(spark, config, state_file, *, stage='plan', start_month='2025-01',
                        for item in state['sources'][key]]
         if source_manifest(stored_rows, config, months) != state['sources']:
             raise ValueError('Checkpoint source manifest changed')
+        if stage == 'recover_charge_schema':
+            return _recover_first_month_charge_schema(
+                spark, config, path, state, confirmation=confirmation,
+                jobs_paused=jobs_paused, dashboard_paused=dashboard_paused,
+                sources_verified=sources_verified)
+        if state['status'] in {'FAILED', 'RUNNING'}:
+            raise ValueError('Previous stage failed/interrupted; preserve checkpoint and diagnose, no blind retry')
         _assert_versions(spark, state)
         if stage == 'plan':
             return _summary(state)
@@ -254,6 +387,7 @@ def run_stage(spark, config, state_file, *, stage='plan', start_month='2025-01',
         raise ValueError('Run plan first and preserve its private checkpoint')
     else:
         _assert_managed(spark, names)
+        charge_schema_migrations = _charge_schema_plan(spark, config)
         versions = _versions(spark, (*names, *security))
         central, canonical = (config.table(key, 'silver')
                               for key in ('silver_central', 'silver_canonical'))
@@ -276,6 +410,7 @@ def run_stage(spark, config, state_file, *, stage='plan', start_month='2025-01',
                  'tables': list(names), 'months': months, 'sources': sources,
                  'baseline': baseline, 'recovery_versions': versions,
                  'expected_versions': versions, 'completed': [],
+                 'charge_schema_migrations': charge_schema_migrations,
                  'monthly_done': [], 'daily_done': [], 'status': 'PLAN_READY'}
         _assert_versions(spark, state)
         _save(path, state)
@@ -292,16 +427,13 @@ def run_stage(spark, config, state_file, *, stage='plan', start_month='2025-01',
         raise ValueError('Exact confirmation and paused jobs/dashboard plus verified sources required')
     if stage == 'reset':
         _assert_managed(spark, names)
+        _charge_schema_plan(spark, config)
     _guard_daily_status(spark, config, state['sources'])
     state['status'] = 'RUNNING'
     _save(path, state)
     try:
         if stage == 'reset':
-            for name in reversed(names):
-                spark.sql(f'TRUNCATE TABLE {quoted_table(name)}').collect()
-            for name in names:
-                if spark.table(name).limit(1).count():
-                    raise ValueError('Reset did not leave every business table empty')
+            _reset_business(spark, config, names)
         elif stage == 'monthly':
             from finops_cloud.pipelines.monthly_close import run as close_month
             for item in state['sources']['monthly']:

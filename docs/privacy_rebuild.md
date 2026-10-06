@@ -15,11 +15,12 @@ l'installation avec suppression des catalogues, PAS cette maintenance.
 
 ## Préparer les fichiers et le workspace
 
-1. Publier le code relu sur une branche de préparation, pas immédiatement sur
-   `main`. Vérifier dans Cloud Build que le trigger de déploiement suit seulement
-   `main` avant de pousser cette branche. Aucun checkpoint, ancien texte nominatif,
+1. Publier le code relu sur `main` seulement après avoir désactivé le trigger Cloud
+   Build de `finops-center`, pour empêcher un déploiement pendant la maintenance.
+   Une branche de préparation reste une alternative si le trigger suit `main`.
+   Aucun checkpoint, ancien texte nominatif,
    mapping privé, token ou sortie de notebook ne doit être ajouté à Git.
-2. Dans le Git Folder belge `finops-cloud_data_platform`, récupérer cette branche.
+2. Dans le Git Folder belge `finops-cloud_data_platform`, récupérer la branche publiée.
    Sauvegarder les modifications Workspace avant le pull; ne pas faire de reset
    pour contourner un conflit. Redémarrer Python si les modules étaient importés.
 3. Suspendre ingestion et promotion. Avant la remise à zéro de PROD, suspendre
@@ -85,6 +86,11 @@ Réexécuter Paramètres puis Exécution. La remise à zéro utilise `TRUNCATE T
 sur les 30 tables métier DEV uniquement. Elle ne supprime aucun catalogue, schéma,
 Volume, fichier RAW, audit ou entitlement. Attendre `STAGE_PASS`.
 
+Avant de vider les tables, le notebook vérifie les colonnes des deux tables de
+charge. Après la remise à zéro, il remplace uniquement les schémas vides qui
+contiennent encore l'ancien `charge_subcategory`, en utilisant les définitions
+SQL actuelles. Une autre différence de colonnes bloque avant la remise à zéro.
+
 Ne pas lancer `00_drop_all_project_catalogs.sql`, l'initialisation des tables,
 les notebooks de maintenance anciens ou un Job normal en parallèle.
 
@@ -149,6 +155,43 @@ Ne pas restaurer seulement une dimension ou un bridge. Une récupération doit
 coordonner les tables métier et les statuts OPS devenus dépendants du rechargement.
 Ne pas faire de `VACUUM` pendant la fenêtre de maintenance/récupération.
 
+### Reprendre le premier mois après une erreur de schéma de charge
+
+Cette exception concerne uniquement le `MERGE` du premier mois qui attend encore
+`charge_subcategory`. Le checkpoint doit indiquer `FAILED`, `failed_stage=monthly`,
+`completed=[reset]`, aucun mois ni daily rejoué. La dimension de charge, le fait,
+les tags, le bridge, Bronze daily et tous les datamarts doivent être vides. Bronze
+billing et les deux Silver doivent contenir uniquement la première source mensuelle
+du plan. Les métadonnées de sécurité doivent avoir conservé leurs versions.
+
+Mettre à jour le Git Folder, puis redémarrer Python pour importer le code corrigé.
+Dans le même notebook et avec le même dossier de checkpoint, utiliser pour DEV :
+
+```python
+ENVIRONMENT = 'dev'
+STAGE = 'recover_charge_schema'
+CONFIRMATION = 'RECOVER_DEV_FIRST_MONTH_CHARGE_SCHEMA'
+JOBS_PAUSED = True
+DASHBOARD_PAUSED = True
+SOURCES_VERIFIED = True
+```
+
+Exécuter Imports, Paramètres puis Exécution, sans utiliser Run all. La reprise
+sauvegarde d'abord le checkpoint en échec dans le dossier privé sous
+`rebuild_dev.before-charge-schema-recovery.json`. Elle vide de nouveau les 30 tables
+métier DEV pour retirer le mois partiel, corrige les deux schémas vides, puis
+actualise les versions attendues. Les références financières, versions de
+récupération initiales et sources du plan sont conservées. Les événements OPS
+en échec restent dans l'historique et aucun entitlement n'est modifié.
+
+Attendre `STAGE_PASS` avec `recovery=CHARGE_SCHEMA_REPAIRED` et `next_stage=monthly`.
+Ensuite remettre `STAGE='monthly'` et `CONFIRMATION='REBUILD_DEV_BUSINESS_DATA'`,
+réexécuter Paramètres puis Exécution. Une erreur pendant cette reprise bloque
+à nouveau : ne pas modifier/supprimer le checkpoint ou son fichier de sauvegarde.
+Cette procédure n'autorise aucune reprise générique ni récupération d'un mois
+ultérieur. Le `reset` corrigé traite aussi l'ancien schéma en PROD avant son
+premier chargement, si cette colonne est encore présente.
+
 Le PASS des motifs connus n'établit pas une anonymisation complète. Examiner aussi
 les codes et conventions de nommage avant publication. Les références originales,
 anciens snapshots et logs restent privés. Un nettoyage de rétention constitue une
@@ -157,8 +200,9 @@ autre opération, pas une raison de supprimer les audits ou les autorisations ic
 ## Terminer la publication
 
 Après validation locale sur PROD propre, vérifier les quatre profils en mode
-`portfolio_demo`, les exports et les périodes. Fusionner la branche dans `main`,
-vérifier le build et la révision Cloud Run, puis activer explicitement le mode
+`portfolio_demo`, les exports et les périodes. Si une branche de préparation a
+été utilisée, la fusionner dans `main`. Réactiver le trigger et déclencher un build
+du code validé, vérifier la révision Cloud Run, puis activer explicitement le mode
 portfolio selon le README de sécurité. Ne pas autoriser la publication avant cela.
 Reprendre les schedules et l'accès au site seulement après les contrôles finaux.
 

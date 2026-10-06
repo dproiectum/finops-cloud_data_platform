@@ -109,6 +109,67 @@ class ScopeTests(unittest.TestCase):
         self.assertTrue(all(not c.get('outputs') for c in nb['cells']))
 
 
+class ChargeSchemaTests(unittest.TestCase):
+    def setUp(self):
+        self.config = load_config('dev')
+        self.dimension = self.config.table('dim_charge_type', 'gold')
+        self.mart = self.config.table('dm_cost_by_charge_type', 'datamart')
+        self.fact = self.config.table('fact_cost_usage', 'gold')
+        self.columns = {
+            self.dimension: ['charge_type_sk', 'charge_category', 'charge_frequency'],
+            self.mart: ['billing_month', 'charge_category', 'charge_frequency', 'total_billed_cost'],
+        }
+        self.spark = MagicMock()
+        self.frames = {t: MagicMock(columns=c) for t, c in self.columns.items()}
+        self.frames[self.fact] = MagicMock()
+        for frame in self.frames.values():
+            frame.limit.return_value.count.return_value = 0
+        self.spark.table.side_effect = self.frames.__getitem__
+
+    def test_known_old_schemas_are_detected_without_writes(self):
+        self.assertEqual(rebuild._charge_schema_plan(self.spark, self.config), [])
+        for table in (self.dimension, self.mart):
+            self.frames[table].columns.append('charge_subcategory')
+        self.assertEqual(rebuild._charge_schema_plan(self.spark, self.config),
+                         [self.dimension, self.mart])
+        self.spark.sql.assert_not_called()
+
+    def test_arbitrary_missing_or_added_columns_are_not_implicitly_migrated(self):
+        for columns in (['charge_type_sk'], [*self.columns[self.dimension], 'another_attribute']):
+            self.frames[self.dimension].columns = columns
+            with self.assertRaisesRegex(ValueError, 'Unexpected charge schema'):
+                rebuild._charge_schema_plan(self.spark, self.config)
+        self.spark.sql.assert_not_called()
+
+    def test_replacement_uses_current_sql_and_writes_only_the_two_empty_targets(self):
+        for table in (self.dimension, self.mart):
+            self.frames[table].columns.append('charge_subcategory')
+        legacy = rebuild._charge_schema_plan(self.spark, self.config)
+        def sql(statement):
+            target = self.dimension if statement.startswith(
+                f'CREATE OR REPLACE TABLE {self.dimension} (') else self.mart
+            self.frames[target].columns.remove('charge_subcategory')
+            return MagicMock()
+        self.spark.sql.side_effect = sql
+        rebuild._repair_empty_charge_schema(self.spark, self.config, legacy)
+        statements = [c.args[0] for c in self.spark.sql.call_args_list]
+        self.assertEqual(len(statements), 2)
+        self.assertIn('charge_type_sk STRING NOT NULL', statements[0])
+        self.assertTrue(statements[0].startswith(f'CREATE OR REPLACE TABLE {self.dimension} ('))
+        self.assertTrue(statements[1].startswith(f'CREATE OR REPLACE TABLE {self.mart} '))
+        self.assertFalse(any('charge_subcategory' in s for s in statements))
+
+    def test_nonempty_dimension_fact_or_mart_blocks_replacement(self):
+        for table in self.frames:
+            with self.subTest(table=table):
+                self.frames[table].limit.return_value.count.return_value = 1
+                with self.assertRaisesRegex(ValueError, 'requires empty'):
+                    rebuild._repair_empty_charge_schema(self.spark, self.config,
+                                                        [self.dimension, self.mart])
+                self.frames[table].limit.return_value.count.return_value = 0
+        self.spark.sql.assert_not_called()
+
+
 class StageTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
@@ -127,6 +188,8 @@ class StageTests(unittest.TestCase):
         self.stack.enter_context(patch.object(rebuild, '_control_path', return_value=self.path))
         self.stack.enter_context(patch.object(rebuild, '_assert_managed'))
         self.stack.enter_context(patch.object(rebuild, '_guard_daily_status'))
+        self.charge_schema = self.stack.enter_context(patch.object(rebuild, '_charge_schema_plan', return_value=[]))
+        self.repair_schema = self.stack.enter_context(patch.object(rebuild, '_repair_empty_charge_schema'))
         self.stack.enter_context(patch.object(rebuild, 'delta_version',
                                              side_effect=lambda s, t: self.versions[t]))
         self.stack.enter_context(patch.object(rebuild, '_lineage', return_value=[{
@@ -294,6 +357,116 @@ class StageTests(unittest.TestCase):
         self.assertNotIn('INSERT', sql)
         self.assertNotIn('DELETE', sql)
         self.assertIn("application_name = 'Data Platform'", sql)
+
+    def failed_first_month(self):
+        self.stage()
+        self.approved('reset')
+        state = self.state()
+        state.update(status='FAILED', failed_stage='monthly')
+        self.path.write_text(json.dumps(state))
+        self.charge_schema.return_value = [self.config.table('dim_charge_type', 'gold'),
+                                           self.config.table('dm_cost_by_charge_type', 'datamart')]
+        self.spark.table.return_value.select.return_value.distinct.return_value.collect.return_value = [
+            {'_source_type': 'MONTHLY_BILLING', '_source_file': self.config.billing_volume_uri('2026-01')}]
+        return state
+
+    def recover(self, **kwargs):
+        arguments = dict(confirmation='RECOVER_DEV_FIRST_MONTH_CHARGE_SCHEMA',
+                         jobs_paused=True, dashboard_paused=True, sources_verified=True)
+        arguments.update(kwargs)
+        return self.stage('recover_charge_schema', **arguments)
+
+    def test_reset_repairs_only_known_legacy_schemas_after_tables_are_empty(self):
+        self.stage()
+        self.charge_schema.return_value = [self.config.table('dim_charge_type', 'gold')]
+        self.approved('reset')
+        self.repair_schema.assert_called_once_with(
+            self.spark, self.config, self.charge_schema.return_value)
+
+    def test_unknown_charge_schema_blocks_reset_before_truncation(self):
+        self.stage()
+        self.charge_schema.side_effect = ValueError('Unexpected charge schema')
+        with self.assertRaisesRegex(ValueError, 'Unexpected charge schema'):
+            self.approved('reset')
+        self.assertEqual(self.state()['status'], 'PLAN_READY')
+        self.assertFalse(any('TRUNCATE' in c.args[0] for c in self.spark.sql.call_args_list))
+
+    def test_diagnosed_recovery_retains_initial_baseline_and_resets_only_dev(self):
+        before = self.failed_first_month()
+        self.versions[self.config.table('bronze_billing', 'bronze')] += 1  # Partial first-month write.
+        self.spark.sql.reset_mock()
+        result = self.recover()
+        self.assertEqual(result['recovery'], 'CHARGE_SCHEMA_REPAIRED')
+        self.assertEqual(result['completed'], ['reset'])
+        self.assertEqual(result['next_stage'], 'monthly')
+        after = self.state()
+        for key in ('baseline', 'recovery_versions', 'sources', 'months'):
+            self.assertEqual(after[key], before[key])
+        self.assertEqual(after['expected_versions'], self.versions)
+        self.assertEqual(after['monthly_done'], [])
+        backup = self.path.with_name('rebuild_dev.before-charge-schema-recovery.json')
+        self.assertEqual(json.loads(backup.read_text())['status'], 'FAILED')
+        targets = [c.args[0] for c in self.spark.sql.call_args_list if 'TRUNCATE' in c.args[0]]
+        self.assertEqual(len(targets), 30)
+        self.assertTrue(all('finops_dev' in t and 'finops_ops' not in t for t in targets))
+        self.repair_schema.assert_called()
+        with patch('finops_cloud.pipelines.monthly_close.run') as load:
+            self.approved('monthly')
+            load.assert_called_once()
+
+    def test_recovery_requires_special_confirmation_not_regular_rebuild_token(self):
+        self.failed_first_month()
+        for changes in ({'confirmation': 'REBUILD_DEV_BUSINESS_DATA'},
+                        {'jobs_paused': False}, {'dashboard_paused': False},
+                        {'sources_verified': False}):
+            with self.assertRaisesRegex(ValueError, 'Exact recovery confirmation'):
+                self.recover(**changes)
+        self.assertFalse(self.path.with_name('rebuild_dev.before-charge-schema-recovery.json').exists())
+
+    def test_recovery_blocks_later_month_or_wrong_failure_before_any_new_writes(self):
+        before = self.failed_first_month()
+        for changes in ({'monthly_done': ['2026-01']}, {'daily_done': ['some-file']},
+                        {'failed_stage': 'daily'}, {'status': 'RUNNING'},
+                        {'completed': ['reset', 'monthly']}):
+            self.path.write_text(json.dumps({**before, **changes}))
+            with self.assertRaisesRegex(ValueError, 'limited to the first'):
+                self.recover()
+
+    def test_recovery_refuses_security_changes_nonempty_tables_or_wrong_source(self):
+        self.failed_first_month()
+        security = 'finops_ops.security.user_entitlement'
+        self.versions[security] += 1
+        with self.assertRaisesRegex(ValueError, 'Security metadata changed'):
+            self.recover()
+        self.versions[security] -= 1
+        self.spark.table.return_value.limit.return_value.count.return_value = 1
+        with self.assertRaisesRegex(ValueError, 'contain rows'):
+            self.recover()
+        self.spark.table.return_value.limit.return_value.count.return_value = 0
+        self.spark.table.return_value.select.return_value.distinct.return_value.collect.return_value = [
+            {'_source_type': 'MONTHLY_BILLING', '_source_file': self.config.billing_volume_uri('2026-02')}]
+        with self.assertRaisesRegex(ValueError, 'billing Bronze'):
+            self.recover()
+        self.assertFalse(self.path.with_name('rebuild_dev.before-charge-schema-recovery.json').exists())
+
+    def test_recovery_refuses_new_silver_month_or_already_fixed_dimension(self):
+        self.failed_first_month()
+        with patch.object(rebuild, '_lineage', return_value=[]):
+            with self.assertRaises(ValueError):
+                self.recover()
+        self.charge_schema.return_value = []
+        with self.assertRaisesRegex(ValueError, 'legacy charge dimension'):
+            self.recover()
+
+    def test_recovery_failure_is_checkpointed_and_cannot_be_blindly_retried(self):
+        before = self.failed_first_month()
+        self.repair_schema.side_effect = RuntimeError('offline replacement failure')
+        with self.assertRaisesRegex(RuntimeError, 'replacement failure'):
+            self.recover()
+        self.assertEqual(self.state()['failed_stage'], 'recover_charge_schema')
+        self.assertEqual(self.state()['baseline'], before['baseline'])
+        with self.assertRaisesRegex(ValueError, 'limited to the first'):
+            self.recover()
 
 
 if __name__ == '__main__':
