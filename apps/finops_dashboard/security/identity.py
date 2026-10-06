@@ -1,4 +1,4 @@
-"""Explicit public/demo/IAP modes with no authentication fallback."""
+"""Explicit public/local-demo/portfolio-demo/IAP modes; no auth fallback."""
 
 from __future__ import annotations
 
@@ -22,16 +22,36 @@ DEMO_PERSONAS = (
     "demo-app-owner-a", "demo-app-owner-b", "demo-finops-admin", "demo-no-access",
 )
 
+# This public sandbox cannot acquire a different role or application merely by
+# changing the live demo assignments. Those assignments are still checked.
+PORTFOLIO_PROFILES = {
+    "demo-finops-admin": ("FINOPS_ADMIN", "ALL", "*"),
+    "demo-app-owner-a": ("APPLICATION_OWNER", "APPLICATION", "APP00013057"),
+    "demo-app-owner-b": ("APPLICATION_OWNER", "APPLICATION", "BSN0003965"),
+}
+PORTFOLIO_PERSONAS = (*PORTFOLIO_PROFILES, "demo-no-access")
+PORTFOLIO_LABELS = {
+    "demo-finops-admin": "FinOps Admin · all synthetic PROD data",
+    "demo-app-owner-a": "Owner A · Data Platform",
+    "demo-app-owner-b": "Owner B · ServiceNow",
+    "demo-no-access": "No Access · access refused",
+}
+
 
 def auth_mode(environ: Mapping[str, str] | None = None) -> str:
     values = os.environ if environ is None else environ
     mode = values.get("FINOPS_AUTH_MODE", "public").strip().lower()
-    if mode not in {"public", "demo", "iap"}:
+    if mode not in {"public", "demo", "portfolio_demo", "iap"}:
         raise SecurityError("Invalid authentication mode. Access refused.")
     if mode == "public" and values.get("K_SERVICE") not in {None, "", "finops-center"}:
         raise SecurityError("Public mode is allowed only for the existing synthetic portfolio service.")
     if mode == "demo" and values.get("K_SERVICE"):
         raise SecurityError("Demo personas are local-only; they cannot run on Cloud Run.")
+    if mode == "portfolio_demo":
+        if values.get("K_SERVICE") not in {None, "", "finops-center"}:
+            raise SecurityError("Portfolio demonstration is allowed only on the synthetic portfolio service.")
+        if values.get("FINOPS_PORTFOLIO_DATA_APPROVED", "").strip().lower() != "true":
+            raise SecurityError("Portfolio data publication has not been approved. Access refused.")
     if mode == "iap" and not values.get("FINOPS_IAP_AUDIENCE", "").strip():
         raise SecurityError("IAP audience is not configured. Access refused.")
     return mode

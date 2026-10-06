@@ -12,7 +12,7 @@ CLASSIC_NOTEBOOKS = ROOT / "platform/classic_compute/notebooks"
 class NotebookTests(unittest.TestCase):
     def test_notebooks_are_clean_valid_and_platform_scoped(self):
         notebooks = sorted((ROOT / "platform").rglob("*.ipynb"))
-        self.assertEqual(len(notebooks), 11)
+        self.assertEqual(len(notebooks), 12)
         self.assertFalse((ROOT / "notebooks").exists())
         for path in notebooks:
             notebook = json.loads(path.read_text(encoding="utf-8"))

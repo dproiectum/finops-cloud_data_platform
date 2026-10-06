@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from config import DashboardConfig
-from .identity import Identity, SecurityError
+from .identity import Identity, SecurityError, PORTFOLIO_PROFILES
 
 
 @dataclass(frozen=True)
@@ -24,6 +24,7 @@ class AccessContext:
     identity: Identity
     environment: str
     is_admin: bool
+    portfolio_demo: bool = False
 
 
 ROLE_SCOPES = {
@@ -103,12 +104,18 @@ def charge_predicate(config: DashboardConfig, alias: str = "c") -> str:
     """
 
 
-def resolve_access(source, config: DashboardConfig, identity: Identity) -> AccessContext:
+def resolve_access(source, config: DashboardConfig, identity: Identity, *,
+                   portfolio_demo: bool = False) -> AccessContext:
     """Read permissions afresh for every rerun; no permission cache/fallback."""
     if identity.provider not in {"demo", "iap"} or not identity.subject:
         raise SecurityError("Unsupported identity. Access refused.")
     if config.data_catalog != f"finops_{config.environment}":
         raise SecurityError("Catalog and execution environment do not match. Access refused.")
+    if portfolio_demo:
+        if config.environment != 'prod' or identity.provider != 'demo':
+            raise SecurityError("Portfolio profiles require synthetic PROD and demo identities.")
+        if identity.subject not in PORTFOLIO_PROFILES:
+            raise SecurityError("No active permission for this portfolio profile.")
     provisional = AccessContext(identity, config.environment, False)
     statement = f"""
         SELECT role, scope_type, scope_id
@@ -122,6 +129,8 @@ def resolve_access(source, config: DashboardConfig, identity: Identity) -> Acces
     is_admin = False
     for row in rows:
         role, scope_type, scope_id = row["role"], row["scope_type"], row["scope_id"]
+        if portfolio_demo and (role, scope_type, scope_id) != PORTFOLIO_PROFILES[identity.subject]:
+            raise SecurityError("Portfolio profile assignments differ from the fixed demonstration scope.")
         if (
             role not in ROLE_SCOPES or ROLE_SCOPES[role] != scope_type
             or not isinstance(scope_id, str) or not scope_id.strip()
@@ -135,7 +144,7 @@ def resolve_access(source, config: DashboardConfig, identity: Identity) -> Acces
             raise SecurityError("Duplicate permission configuration. Access refused.")
         seen.add(key)
         is_admin = is_admin or role == "FINOPS_ADMIN"
-    context = AccessContext(identity, config.environment, is_admin)
+    context = AccessContext(identity, config.environment, is_admin, portfolio_demo)
     if not is_admin:
         mappings = source.query(f"""
             SELECT b.application_code

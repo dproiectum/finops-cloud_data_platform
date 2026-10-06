@@ -11,7 +11,7 @@ import re
 from .authorization import (
     AccessContext, BoundQuery, admin_predicate, charge_predicate, viewer_parameters,
 )
-from .identity import SecurityError
+from .identity import SecurityError, PORTFOLIO_PROFILES
 
 
 class ScopedQueries:
@@ -23,6 +23,11 @@ class ScopedQueries:
             raise SecurityError("Cross-environment query refused.")
         if config.data_catalog != f"finops_{config.environment}":
             raise SecurityError("Cross-catalog query refused.")
+        if self.context.portfolio_demo:
+            expected = PORTFOLIO_PROFILES.get(self.context.identity.subject)
+            if (config.environment != 'prod' or self.context.identity.provider != 'demo'
+                    or expected is None or self.context.is_admin != (expected[0] == 'FINOPS_ADMIN')):
+                raise SecurityError("Invalid portfolio demonstration context.")
 
     def _query(self, config, body: str, month: str | None = None) -> BoundQuery:
         self._validate(config)
@@ -31,9 +36,17 @@ class ScopedQueries:
             if not re.fullmatch(r"[0-9]{4}-(0[1-9]|1[0-2])", month):
                 raise SecurityError("Invalid billing month.")
             bindings["billing_month"] = month
+        sandbox = ''
+        if self.context.portfolio_demo:
+            _, scope_type, scope_id = PORTFOLIO_PROFILES[self.context.identity.subject]
+            if scope_type == 'APPLICATION':
+                bindings['portfolio_application'] = scope_id
+                sandbox = ' AND c.application_code = :portfolio_application'
+            else:
+                sandbox = ' AND ' + admin_predicate(config)
         text = f"""WITH authorized_rows AS (
             SELECT c.* FROM {config.datamart('v_dashboard_charge_scoped')} c
-            WHERE {charge_predicate(config)}
+            WHERE {charge_predicate(config)}{sandbox}
         ) {body}"""
         return BoundQuery(text, tuple(bindings.items()))
 
@@ -176,6 +189,8 @@ class ScopedQueries:
 
     def _ops(self, config, body):
         self._validate(config)
+        if self.context.portfolio_demo:
+            raise SecurityError("Raw operational history is not published in portfolio demonstrations.")
         if not self.context.is_admin:
             raise SecurityError("Operations access is restricted to FinOps administrators.")
         # Recheck the live admin grant in SQL too, even if navigation was resolved earlier.

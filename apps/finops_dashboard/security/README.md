@@ -1,4 +1,4 @@
-# Viewer scope enforcement — steps 7 and 8
+# Dashboard access modes and validation
 
 The implementation is local until reviewed and deployed. No Git push, Cloud Run
 change, or Databricks execution is performed by creating these files.
@@ -9,6 +9,7 @@ change, or Databricks execution is performed by creating these files.
 |---|---|---|---|
 | `public` (current default) | None | Existing global datamarts | Existing synthetic portfolio only |
 | `demo` | Four fixed synthetic personas | Live entitlement predicates | Local manual authorization tests only |
+| `portfolio_demo` | Four fixed selectable synthetic profiles | Live predicates plus a fixed application sandbox | Public synthetic portfolio after explicit data approval |
 | `iap` | Verified IAP signed JWT subject | Live entitlement predicates | Future separate private Cloud Run service |
 
 `demo` is rejected when Cloud Run sets `K_SERVICE`. On Cloud Run, `public` is
@@ -29,6 +30,67 @@ The shared backend identity still reads the serving view globally. Visitors must
 not receive backend credentials or direct SQL access. A public synthetic dataset
 and its public service are not a secure deployment for confidential business data.
 People who already have direct Databricks access retain their separate UC rights.
+
+## Publish the synthetic role portfolio
+
+The selectable public sandbox demonstrates application-level authorization, not
+authentication. Visitors may choose its FinOps Admin profile; therefore ALL data
+that this profile can read must be approved for public disclosure. Fixed profile
+restrictions cannot make confidential data safe for a public site.
+
+1. Complete `docs/privacy_rebuild.md` in DEV then PROD and the serving-view checks
+   04/05. Review remaining naming conventions too: known-pattern PASS is not proof
+   of complete anonymity. Keep raw OPS history, operator identities, source
+   originals, private mappings, recovery records and secrets inaccessible.
+2. Check the existing Cloud Run backend service principal has USE CATALOG on PROD
+   and OPS, USE SCHEMA on PROD datamart and OPS security, SELECT on the serving view
+   and SELECT on the two security tables. Use the actual Databricks application ID,
+   not the app display name. Existing datamart SELECT may already cover the view.
+   If security reads are missing, apply only these additive grants manually:
+
+   ```sql
+   GRANT USE CATALOG ON CATALOG finops_ops TO `<service-principal-application-id>`;
+   GRANT USE SCHEMA ON SCHEMA finops_ops.security TO `<service-principal-application-id>`;
+   GRANT SELECT ON TABLE finops_ops.security.business_scope TO `<service-principal-application-id>`;
+   GRANT SELECT ON TABLE finops_ops.security.user_entitlement TO `<service-principal-application-id>`;
+   ```
+
+   No write grants, direct visitor SQL access, Silver-wide permissions or new
+   bucket/credential are required. The view owner's underlying grants must remain.
+3. Retest locally against clean PROD, using the existing Belgian backend profile:
+
+   ```bash
+   export FINOPS_AUTH_MODE=portfolio_demo
+   export FINOPS_PORTFOLIO_DATA_APPROVED=true
+   export FINOPS_ENVIRONMENT=prod
+   export FINOPS_DATABRICKS_CATALOG=finops_prod
+   python -m streamlit run apps/finops_dashboard/app.py --server.address=127.0.0.1 --server.port=8502
+   ```
+
+   This opt-in means the operator has reviewed the real dataset. Without it the
+   app stops before connecting. `demo` remains forbidden on Cloud Run; do not
+   remove that restriction or use a local tunnel to expose the demo server.
+4. Verify Owner A only APP00013057/Data Platform, Owner B only BSN0003965,
+   FinOps Admin all synthetic PROD, No Access no business rows. Check every page,
+   available period and table export. Public Admin's Operations page exposes only
+   safe charge completeness counts; raw OPS queries are refused even for Admin.
+5. Publish the reviewed code to `main` only after validation. Confirm Cloud Build
+   and Cloud Run `finops-center` use that commit. In Cloud Run configuration set
+   `FINOPS_AUTH_MODE=portfolio_demo` and `FINOPS_PORTFOLIO_DATA_APPROVED=true`, while
+   preserving existing connection settings/secrets. Set both variables together,
+   inspect the new ready revision, then repeat profile tests before reopening.
+   Only this existing public service name is allowed; no private-service fallback.
+
+Portfolio profiles accept only their fixed PROD/demo entitlement tuples. An
+unexpected broader grant fails closed; an already built owner query also binds
+its fixed application code. Live revocation/expiry still applies. All protected
+queries aggregate scoped charges and bypass shared Streamlit result caches.
+The Admin persona is not a Databricks administrator or an authenticated user.
+
+Offline regression tests cover these conditions and the Streamlit profile switch.
+Live SQL totals and Cloud Run revision/browser tests remain separate evidence.
+Real confidential-user access belongs to the signed-IAP/private deployment, not
+this portfolio feature.
 
 ### Databricks SQL predicate compatibility
 

@@ -22,6 +22,11 @@ logic.
   source Volume before loading.
 - `operations/initialize_empty_data_tables.ipynb`: manually create all 30 empty
   business tables in DEV or PROD after a complete reset.
+- `operations/rebuild_clean_environment.ipynb`: manual privacy maintenance,
+  DEV then PROD, using existing schemas and verified clean RAW; see
+  `docs/privacy_rebuild.md`. Default PLAN changes no managed data.
+- `operations/repair_dataset_privacy.ipynb`: retired blocking redirect only,
+  retained to stop old bookmarked procedures; never schedule or execute APPLY.
 Automatic archival has no active notebook or Job because RAW is consumed by
 both DEV and PROD.
 

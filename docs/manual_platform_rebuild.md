@@ -4,6 +4,11 @@ Cette procédure suit le plan validé en huit phases. Aucun script n’est exéc
 automatiquement par le dépôt. Toutes les commandes destructives restent sous le
 contrôle de l’ingénieur dans Databricks SQL.
 
+**Installation complète uniquement.** Pour remplacer les données identifiantes
+déjà chargées, suivre [privacy_rebuild.md](privacy_rebuild.md) : elle conserve RAW,
+OPS, les catalogues, les schémas et les permissions. Ne pas appliquer les DROP
+de cette page à cette maintenance.
+
 Choisir un seul scénario de création pour tout le workspace :
 
 - `platform/serverless` pour Serverless avec Default Storage;

@@ -82,4 +82,4 @@ WHERE identity_provider = 'demo'
   AND principal_id IN ('demo-finops-admin', 'demo-app-owner-a', 'demo-app-owner-b')
 ORDER BY principal_id;
 
-SELECT 'PASS: demo metadata only; dashboard enforcement is not implemented' AS result;
+SELECT 'PASS: demo metadata valid; validate dashboard enforcement separately' AS result;

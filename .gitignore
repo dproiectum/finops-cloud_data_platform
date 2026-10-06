@@ -14,3 +14,8 @@ __pycache__/
 .env.*
 !.env.example
 databricks.yml.lock
+rebuild_dev.json
+rebuild_prod.json
+rebuild_dev.json.tmp
+rebuild_prod.json.tmp
+text_mapping.json

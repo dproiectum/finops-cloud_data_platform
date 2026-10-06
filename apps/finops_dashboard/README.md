@@ -136,8 +136,12 @@ Source: https://focus.finops.org/docs/specification/v1-0/columns/cost-and-usage/
 
 The backend identity and read-only SQL access are separate from viewer
 authorization. The public deployment still uses global synthetic datamarts.
-Local code now supports explicit `public`, local-only `demo`, and verified `iap`
-modes. Protected queries enforce live viewer entitlements before aggregation and
+Local code supports `public`, local-only `demo`, opt-in public synthetic
+`portfolio_demo`, and verified `iap` modes. `portfolio_demo` adds four fixed
+profiles; it requires `FINOPS_PORTFOLIO_DATA_APPROVED=true`, blocks raw OPS reads,
+and must be checked against clean PROD before deployment. Profile selection is
+not user authentication. Follow `security/README.md` for its grants and checks.
+Protected queries enforce live viewer entitlements before aggregation and
 do not share Streamlit query-result caches. This is application-level enforcement,
 not a Unity Catalog row-filter policy. No private IAP service or real-user access
 has been deployed by this change. A public portfolio must use synthetic data only;
@@ -159,9 +163,10 @@ does not enable viewer enforcement on the public site.
 2. Create `finops_ops.security.user_entitlement` and `business_scope`, and populate
    approved synthetic assignments for a first controlled demonstration. This is
    additive setup, not a catalog reset or a full data reload.
-3. Protected mode enforces scope before aggregation through bound parameters and
+3. Scoped modes enforce scope before aggregation through bound parameters and
    live entitlement predicates against a charge-grain serving view. Test this
-   against the real synthetic dataset. OPS is administrator-only.
+   against the real synthetic dataset. Local demo/IAP OPS is administrator-only;
+   public portfolio Admin receives completeness statistics, never raw OPS history.
 4. Protected mode disables query-result and permission caches. Test
    both page navigation and table export; hiding navigation is not authorization.
 5. For deployed authentication, configure IAP, validate the signed assertion with

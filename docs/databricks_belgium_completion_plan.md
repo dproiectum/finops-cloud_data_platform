@@ -4,6 +4,13 @@ Ce plan complète les procédures de reconstruction, de promotion PROD et du
 pipeline Daily. L'ingénieur applique les changements et lance les Jobs dans
 l'interface Databricks ; le dépôt fournit le code et les contrôles.
 
+Avant une reprise après nettoyage des textes identifiants, suivre
+`docs/privacy_rebuild.md`. Cette maintenance conserve les catalogues, RAW et OPS
+et rejoue seulement les données déjà actives. Ne pas rattraper de nouveaux daily
+ni activer des schedules pendant la reconstruction. Les jalons ci-dessous
+décrivent le plan initial; les résultats de nettoyage et de publication sont à
+valider séparément, pas à déduire des premiers runs réussis.
+
 ## État de départ
 
 - Les quatre catalogues `finops_raw`, `finops_dev`, `finops_prod` et

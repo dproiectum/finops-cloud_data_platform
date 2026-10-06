@@ -22,7 +22,7 @@ import queries
 from security import (
     BoundQuery, SecurityError, auth_mode, demo_identity, iap_identity, resolve_access,
 )
-from security.identity import DEMO_PERSONAS
+from security.identity import DEMO_PERSONAS, PORTFOLIO_PERSONAS, PORTFOLIO_LABELS
 from security.queries import ScopedQueries
 
 
@@ -95,6 +95,18 @@ try:
         st.sidebar.warning("Local synthetic authorization test — not authentication")
         persona = st.sidebar.selectbox("Demo Identity", DEMO_PERSONAS, key="demo_identity")
         identity = demo_identity(persona)
+    elif mode == "portfolio_demo":
+        st.info(
+            "Synthetic dataset — role-based access demonstration. "
+            "Select a profile to explore its authorized scope. "
+            "Profile selection is not user authentication."
+        )
+        persona = st.sidebar.selectbox(
+            "Explore as", PORTFOLIO_PERSONAS, key="portfolio_profile",
+            format_func=lambda subject: PORTFOLIO_LABELS[subject],
+        )
+        st.sidebar.caption("Public demonstration · fixed synthetic profiles")
+        identity = demo_identity(persona)
     elif mode == "iap":
         identity = iap_identity(st.context.headers, os.environ["FINOPS_IAP_AUDIENCE"].strip())
         st.sidebar.caption(f"Verified identity: {identity.subject}")
@@ -106,7 +118,7 @@ try:
     config = DashboardConfig.from_environment()
     source = build_source()
     if identity is not None:
-        access = resolve_access(source, config, identity)
+        access = resolve_access(source, config, identity, portfolio_demo=mode == "portfolio_demo")
         queries = ScopedQueries(access)
 except SecurityError as exc:
     st.error(str(exc))
@@ -595,6 +607,23 @@ def operations_page(month: str) -> None:
         f"Environment: {config.environment.upper()} · period: {month}",
     )
     quality = require_row(load_frame(queries.data_quality(config, month)), "quality")
+    if access is not None and access.portfolio_demo:
+        # Never request raw OPS tables, even for the public admin persona.
+        st.info(
+            "Portfolio view: these completeness metrics are computed from authorized "
+            "synthetic charges. Raw execution logs, error messages and audit histories "
+            "are not published."
+        )
+        st.metric("Critical Completeness", percent(quality["critical_completeness_rate"]))
+        controls = pd.DataFrame(
+            [("Rows Checked", quality["total_rows"]),
+             ("Missing Billed Cost", quality["billed_cost_nulls"]),
+             ("Missing Currency", quality["currency_nulls"]),
+             ("Missing Service", quality["service_nulls"])],
+            columns=["Control", "Value"],
+        )
+        st.dataframe(financial_table(controls), hide_index=True, width="stretch")
+        return
     runs = load_frame(queries.latest_pipeline_runs(config))
     reconciliations = load_frame(queries.latest_reconciliations(config))
     counts = load_frame(queries.environment_run_counts(config))

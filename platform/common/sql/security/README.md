@@ -2,9 +2,8 @@
 
 These additive scripts support both compute scenarios. They inherit the managed
 storage of the existing `finops_ops` catalog. They do not reset catalogs, reload
-business data, create a new bucket, change Cloud Run authentication, or enable
-viewer authorization. The dashboard still uses global queries until step 7 is
-implemented and tested.
+business data, create a new bucket, change Cloud Run authentication, or select a dashboard access mode. Application authorization is implemented and
+tested locally; the deployment mode decides whether global or scoped queries run.
 
 ## Execute manually in workspace-belgium
 
@@ -20,7 +19,7 @@ implemented and tested.
    scopes and three demo permission rows, not four scopes or six permissions.
 
 Successful `assert_true` queries return `NULL`; the final explicit result is
-`PASS: demo metadata only; dashboard enforcement is not implemented`.
+`PASS: demo metadata valid; validate dashboard enforcement separately`.
 An inactive or expired permission is deliberately preserved. Validation then
 fails, rather than silently restoring access. Inspect and explicitly approve any
 required change instead of deleting/resetting these tables.
@@ -39,9 +38,9 @@ those emails access.
 | Demo principal | Role | Environment | Scope |
 |---|---|---|---|
 | `demo-finops-admin` | `FINOPS_ADMIN` | `prod` | `ALL`, `*` |
-| `demo-app-owner-a` | `APPLICATION_OWNER` | `prod` | `APPLICATION`, `APP00013057` — Data Platform (target anonymized label; existing data requires repair) |
+| `demo-app-owner-a` | `APPLICATION_OWNER` | `prod` | `APPLICATION`, `APP00013057` — Data Platform (verify loaded tables after clean rebuild) |
 | `demo-app-owner-b` | `APPLICATION_OWNER` | `prod` | `APPLICATION`, `BSN0003965` — ServiceNow |
-| `demo-no-access` | No entitlement | — | Must be denied by the future application |
+| `demo-no-access` | No entitlement | — | Denied by scoped application modes |
 
 All three permission rows have `identity_provider = 'demo'`; their emails use
 `example.invalid`. These are synthetic test personas, not actual IAP identities
@@ -62,9 +61,9 @@ Uniqueness is checked for the selected records, not enforced by an SQL primary
 key. This initial metadata setup has no historical versioning or authorization
 change audit; do not claim these features in the thesis.
 
-## Step 7 code available locally; live validation pending
+## Application authorization and deployment modes
 
-Step 7 code is now under `apps/finops_dashboard/security/`. Execute files 04/05
+Scoped query code is under `apps/finops_dashboard/security/`. Execute files 04/05
 manually to create/validate the charge-grain serving view, then follow that
 directory's README for an isolated local test. First create the shared Gold
 allocation view with `operations/apply_cost_center_allocation.ipynb` as explained
@@ -72,7 +71,7 @@ in the Gold README. Script 04 reads this view so public and protected Cost Cente
 allocation use the same synthetic policy. Allocation never changes entitlements.
 Signed-identity verification,
 live parameterized entitlement predicates, uncached protected results and
-deny-by-default handling are implemented locally, not deployed to the public site.
+deny-by-default handling are implemented locally, public deployment requires its own mode selection and live checks.
 The view preserves existing FOCUS cost semantics, including ContractedCost for Savings.
 Script 04 no longer references or invents `ChargeSubcategory`; the actual source
 region column is `Region`. Before using the updated Gold loaders with old tables,
@@ -88,49 +87,33 @@ filtered cost is not necessarily smaller than the global total. Global OPS
 operational pages must not be exposed to restricted application owners.
 
 These metadata checks are not substitutes for the step 8 authorization tests.
-Keep the public portfolio unchanged while testing those controls
-separately. Any later IAP deployment requires a separate private-service plan.
+The public role sandbox uses `portfolio_demo`, with four fixed synthetic profiles
+and explicit data-publication approval. It is not authentication and exposes no raw
+OPS history. See the application security README. Real IAP users require a separate
+private-service configuration and live authentication tests.
 
-## Historical dataset privacy repair — manual operation
+## Historical privacy maintenance
 
-The audit recorded in `privacy_audit_20261006.json` found organization labels,
-hostnames and residual email addresses in source JSON and downstream dimensions.
-A dashboard-only replacement is insufficient. The independent generator now
-produces sanitized text; ingestion guards reject the known residual patterns.
-This targeted policy is not proof of complete anonymity.
+The source audit is preserved in `privacy_audit_20261006.json`; its historical
+findings are not a declaration that current managed tables are clean. The audited
+local export passed known-pattern checks and the operator reported replacing the
+567 existing GCS objects. DEV/PROD rebuild results are required before publication.
 
-1. Synchronize the Cloud Platform and Generator code to GitHub, then pull their
-   Git folders in Belgium. The maintenance notebook imports the generator's
-   checksum-pinned pure text policy, not its datasets.
-2. Pause DEV/PROD ingestion, promotion jobs and dashboard reads. Publish the
-   verified clean copies to the SAME existing GCS object paths. There are 18
-   monthly and 549 daily Parquet objects in the current GCS inventory. Do not
-   upload the additional 59 local daily files during this repair; do not upload
-   the reference Parquets. Never delete the bucket or source tree.
-3. Open `platform/common/notebooks/operations/repair_dataset_privacy.ipynb` on
-   Spark compute. Confirm its `POLICY_FILE` points to the Generator Git folder.
-   Keep `ENVIRONMENT = "dev"` and `CONFIRMATION = ""`. Run the read-only plan.
-4. Review findings. Set `CONFIRMATION = "APPLY_DATASET_PRIVACY_REPAIR"` only when
-   clean source publication and the pause are complete. The notebook verifies
-   loaded source copies before updates, prints Delta recovery versions, repairs
-   tag-key relationships, refreshes marts, and checks financial baselines.
-   Save the recovery output. Stop on an error: updates across tables are not one
-   atomic transaction, and a failed run must be investigated before any retry.
-5. After DEV returns `PASS`, repeat the dry-run and explicit apply in PROD.
-   Execute `05_validate_dashboard_serving_view.sql`, clear/restart the dashboard
-   cache, and verify Owner A, Owner B, FinOps Admin and No Access again. Only
-   then resume jobs and dashboard reads. No financial backfill is required.
+Follow `docs/privacy_rebuild.md` and
+`platform/common/notebooks/operations/rebuild_clean_environment.ipynb`.
+Default PLAN changes no managed table and saves a private checkpoint outside Git.
+The later stages reset only the selected environment's 30 managed business tables
+and reuse existing monthly/daily transformations. RAW, catalogs, schemas, audit
+history and entitlements are retained. Only the selected environment's
+APP00013057 display label is corrected in business_scope after financial checks.
 
-Clean local release: `FinOps Data Generator/privacy_exports/release-20261006/`.
-Use `datasets/focus/` for cloud source copies; `datasets/reference/` is private
-generator input and `archive/` is a separate local archive export. Each export
-root has a verification manifest. Originals, generator ledger, active POC data,
-old Delta snapshots, noncurrent GCS versions and operator logs are not erased.
-Keep identifying historical material restricted. Any retention cleanup or POC
-rebuild is a separate operation, not part of this migration.
+The old `repair_dataset_privacy.ipynb` is a blocking redirect. Native text mapping,
+separate tag/bridge repair and monolithic APPLY are retired. Do not use old code
+from Workspace history or create a second maintenance chain.
 
-The notebook has local structural/unit coverage; it has NOT yet been applied
-on Databricks. The DEV execution remains the required integration validation.
+A clean active snapshot does not erase historical Delta/GCS versions, generator
+originals, POC data or operator logs. Keep those private. The policy checks known
+organization/email patterns, not full anonymity or legal compliance.
 
 ## Technical references
 

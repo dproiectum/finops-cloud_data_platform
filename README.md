@@ -34,6 +34,13 @@ apps/finops_dashboard/          Read-only Streamlit Databricks App
 
 ## Manual rebuild and load
 
+For historical privacy cleanup without dropping catalogs, follow
+[docs/privacy_rebuild.md](docs/privacy_rebuild.md). The guarded manual notebook
+`platform/common/notebooks/operations/rebuild_clean_environment.ipynb` captures
+each environment's baseline, resets business tables only, and reuses the normal
+monthly/daily pipelines. The old targeted text-mapping APPLY is retired.
+
+For a fresh installation or a separately approved full catalog reset only:
 Follow [docs/manual_platform_rebuild.md](docs/manual_platform_rebuild.md).
 The structure-only notebook is
 `platform/common/notebooks/operations/initialize_empty_data_tables.ipynb`; run

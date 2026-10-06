@@ -149,7 +149,7 @@ class SqlModelTests(unittest.TestCase):
         self.assertIn("actual.valid_from <= CURRENT_TIMESTAMP()", controls)
         self.assertIn("actual.valid_to > CURRENT_TIMESTAMP()", controls)
         self.assertIn("demo-no-access", controls)
-        self.assertIn("PASS: demo metadata only; dashboard enforcement is not implemented", controls)
+        self.assertIn("PASS: demo metadata valid; validate dashboard enforcement separately", controls)
         self.assertNotIn("MERGE INTO", controls)
 
     def test_security_scripts_are_packaged_without_placeholders(self):

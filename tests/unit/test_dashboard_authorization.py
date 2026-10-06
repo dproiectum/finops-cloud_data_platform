@@ -365,6 +365,75 @@ class AuthorizationTests(unittest.TestCase):
             validate(self.source, self.config, "2026-01")
 
 
+class PortfolioAuthorizationTests(unittest.TestCase):
+    """Public synthetic sandbox; profile selection is not authentication."""
+    def setUp(self):
+        with patch.dict(os.environ, {}, clear=True):
+            self.config = DashboardConfig.from_environment()
+        self.source = FixtureSource()
+
+    def queries(self, subject):
+        return ScopedQueries(resolve_access(self.source, self.config, demo_identity(subject),
+                                             portfolio_demo=True))
+
+    def test_publication_approval_and_service_restrictions(self):
+        approved = {'FINOPS_AUTH_MODE': 'portfolio_demo', 'FINOPS_PORTFOLIO_DATA_APPROVED': 'true'}
+        self.assertEqual(auth_mode(approved), 'portfolio_demo')
+        self.assertEqual(auth_mode({**approved, 'K_SERVICE': 'finops-center'}), 'portfolio_demo')
+        for config in ({'FINOPS_AUTH_MODE': 'portfolio_demo'},
+                       {**approved, 'FINOPS_PORTFOLIO_DATA_APPROVED': 'false'},
+                       {**approved, 'K_SERVICE': 'finops-center-private'},
+                       {'FINOPS_AUTH_MODE': 'demo', 'K_SERVICE': 'finops-center'}):
+            with self.assertRaises(SecurityError):
+                auth_mode(config)
+
+    def test_fixed_profiles_have_exact_applications_and_totals(self):
+        for subject, code, expected in [('demo-app-owner-a', 'APP00013057', 150),
+                                         ('demo-app-owner-b', 'BSN0003965', 180)]:
+            queries = self.queries(subject)
+            self.assertEqual(self.source.run(queries.application_owners(self.config, '2026-01'))
+                             ['application_code'].tolist(), [code])
+            self.assertEqual(self.source.run(queries.executive_summary(self.config, '2026-01'))
+                             .iloc[0]['billed_cost'], expected)
+        self.assertEqual(self.source.run(self.queries('demo-finops-admin')
+                         .executive_summary(self.config, '2026-01')).iloc[0]['billed_cost'], 30)
+
+    def test_no_access_refused_before_entitlement_sql(self):
+        with self.assertRaises(SecurityError):
+            self.queries('demo-no-access')
+        self.assertFalse(self.source.calls)
+
+    def test_unexpected_extra_grant_cannot_expand_public_profile(self):
+        self.source.grant('demo-app-owner-a', 'FINOPS_ADMIN', 'ALL', '*')
+        with self.assertRaises(SecurityError):
+            self.queries('demo-app-owner-a')
+
+    def test_existing_bound_query_is_confined_after_live_broadening_then_revoked(self):
+        query = self.queries('demo-app-owner-a').application_owners(self.config, '2026-01')
+        self.source.grant('demo-app-owner-a', 'FINOPS_ADMIN', 'ALL', '*')
+        self.assertEqual(self.source.run(query)['application_code'].tolist(), ['APP00013057'])
+        self.source.connection.execute("UPDATE entitlement SET is_active=FALSE "
+                                       "WHERE principal_id='demo-app-owner-a'")
+        self.assertTrue(self.source.run(query).empty)
+
+    def test_portfolio_admin_quality_does_not_publish_raw_ops(self):
+        queries = self.queries('demo-finops-admin')
+        for method in (queries.latest_pipeline_runs, queries.latest_reconciliations,
+                       queries.environment_run_counts):
+            with self.assertRaises(SecurityError):
+                method(self.config)
+        bound = queries.data_quality(self.config, '2026-01')
+        self.assertNotIn('finops_ops.audit', bound.text)
+        self.assertEqual(self.source.run(bound).iloc[0]['total_rows'], 5)
+
+    def test_portfolio_cannot_use_dev_or_real_authenticated_identity(self):
+        dev = replace(self.config, environment='dev', data_catalog='finops_dev')
+        for config, identity in ((dev, demo_identity('demo-app-owner-a')),
+                                  (self.config, Identity('iap', 'demo-app-owner-a'))):
+            with self.assertRaises(SecurityError):
+                resolve_access(self.source, config, identity, portfolio_demo=True)
+
+
 class IdentityTests(unittest.TestCase):
     audience = "/projects/243421621568/locations/europe-west1/services/finops-center-private"
 
@@ -512,6 +581,58 @@ class ProtectedDashboardTests(unittest.TestCase):
         import streamlit as st
         st.cache_data.clear()
         st.cache_resource.clear()
+
+    def test_portfolio_profile_switches_do_not_share_results(self):
+        from streamlit.testing.v1 import AppTest
+        with (
+            patch.dict(os.environ, {'FINOPS_AUTH_MODE': 'portfolio_demo',
+                                    'FINOPS_PORTFOLIO_DATA_APPROVED': 'true'}, clear=True),
+            patch('data_access.DatabricksDataSource', return_value=self.source),
+        ):
+            app = AppTest.from_file(str(APP / 'app.py'), default_timeout=30).run()
+            app.selectbox(key='billing_month').select('2026-01').run()
+            self.assertEqual(app.metric[0].value, '30,00 €')
+            app.selectbox(key='portfolio_profile').select('demo-app-owner-a').run()
+            app.selectbox(key='billing_month').select('2026-01').run()
+            self.assertEqual(app.metric[0].value, '150,00 €')
+            app.selectbox(key='portfolio_profile').select('demo-app-owner-b').run()
+            self.assertEqual(app.metric[0].value, '180,00 €')
+            self.source.calls.clear()
+            app.selectbox(key='portfolio_profile').select('demo-no-access').run()
+            self.assertFalse(app.exception)
+            self.assertEqual(len(app.metric), 0)
+            self.assertFalse(self.source.calls)
+
+    def test_portfolio_without_publication_approval_stops_before_connection(self):
+        from streamlit.testing.v1 import AppTest
+        with (
+            patch.dict(os.environ, {'FINOPS_AUTH_MODE': 'portfolio_demo'}, clear=True),
+            patch('data_access.DatabricksDataSource') as source,
+        ):
+            app = AppTest.from_file(str(APP / 'app.py'), default_timeout=30).run()
+            self.assertFalse(app.exception)
+            self.assertEqual(len(app.metric), 0)
+            source.assert_not_called()
+
+    def test_portfolio_operations_page_publishes_completeness_not_raw_logs(self):
+        from streamlit.testing.v1 import AppTest
+        class TestPage:
+            def __init__(self, function, *, title, **kwargs):
+                self.function, self.title = function, title
+            def run(self):
+                self.function()
+        with (
+            patch.dict(os.environ, {'FINOPS_AUTH_MODE': 'portfolio_demo',
+                                    'FINOPS_PORTFOLIO_DATA_APPROVED': 'true'}, clear=True),
+            patch('data_access.DatabricksDataSource', return_value=self.source),
+            patch('streamlit.Page', TestPage),
+            patch('streamlit.navigation', side_effect=lambda pages, **kw:
+                  next(page for page in pages if page.title == 'Operations & Quality')),
+        ):
+            app = AppTest.from_file(str(APP / 'app.py'), default_timeout=30).run()
+            self.assertFalse(app.exception)
+            self.assertTrue(app.metric)
+            self.assertFalse(any('finops_ops.audit' in sql for sql, _ in self.source.calls))
 
     def test_persona_switch_and_revocation_have_no_shared_cached_results(self):
         from streamlit.testing.v1 import AppTest
