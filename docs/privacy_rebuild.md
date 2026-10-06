@@ -1,13 +1,17 @@
 # Reconstruction des données métier nettoyées
 
-Cette maintenance recharge les Parquet vérifiés par les pipelines existants,
-d'abord dans DEV puis dans PROD. Elle conserve les quatre catalogues, les schémas,
+Cette maintenance recharge les Parquet vérifiés par les pipelines existants dans
+DEV, puis promeut les tables validées vers PROD par copie indépendante. Elle conserve les quatre catalogues, les schémas,
 les Volumes RAW, les chemins GCS, les permissions et l'historique OPS. Elle ne
 supprime pas les anciens fichiers Delta, les versions GCS ou les journaux.
 
-Utiliser exclusivement :
+Pour reconstruire DEV, utiliser :
 
 `platform/common/notebooks/operations/rebuild_clean_environment.ipynb`
+
+Après DEV PASS, utiliser pour la copie vers PROD :
+
+`platform/common/notebooks/operations/promote_clean_dev_to_prod.ipynb`
 
 L'ancien `repair_dataset_privacy.ipynb` est un renvoi bloquant. Son APPLY et la
 réparation par mapping sont retirés. `docs/manual_platform_rebuild.md` décrit
@@ -123,24 +127,59 @@ Une divergence laisse la maintenance en échec : pas de publication malgré un
 rechargement apparemment réussi. Les empreintes de clés SKU/tags peuvent changer
 avec le texte nettoyé; les dimensions et leurs relations sont reconstruites ensemble.
 
-## Refaire séparément pour PROD
+## Promouvoir les tables DEV validées vers PROD
 
-Après DEV PASS, conserver le checkpoint DEV. Mettre PROD et le site en maintenance.
-Choisir `ENVIRONMENT = 'prod'`, remettre `STAGE = 'plan'`, `CONFIRMATION = ''` et
-les trois confirmations à `False`. PLAN capture la référence propre à PROD.
+Pour cette maintenance, la promotion remplace le second rechargement complet de
+PROD. Attendre DEV PASS avant de mettre à jour le Git Folder ou de commencer la
+promotion. Ne pas lancer le notebook de reconstruction PROD en parallèle.
 
-Après revue, utiliser `REBUILD_PROD_BUSINESS_DATA`, confirmer les conditions et
-exécuter `reset`, `monthly`, `daily`, `validate` dans cet ordre. Les autres paramètres
-et les catalogues ne changent pas. Ne pas comparer PROD à une référence DEV.
+Ouvrir `platform/common/notebooks/operations/promote_clean_dev_to_prod.ipynb`
+sur le compute Spark belge, avec le même dossier privé. Il lit `rebuild_dev.json`
+et conserve sa preuve de validation. Un autre checkpoint,
+`promote_dev_to_prod.json`, enregistre les références PROD et les versions DEV figées.
 
-Après les deux PASS, exécuter manuellement dans PROD :
+1. Laisser `STAGE='plan'`, `CONFIRMATION=''`, `JOBS_PAUSED=False` et
+   `DASHBOARD_PAUSED=False`. Exécuter Imports, Paramètres puis Exécution.
+   PLAN ne modifie aucune table Databricks; il sauvegarde seulement le checkpoint
+   privé. Il exige DEV PASS, 30 tables Delta gérées de chaque côté et des sources,
+   périodes, lignes et montants financiers DEV/PROD compatibles. Un périmètre
+   PROD différent bloque la copie, plutôt que de supprimer ses données spécifiques.
+   Conserver les versions de récupération et attendre `PLAN_READY`.
+2. Suspendre tous les jobs et les lectures publiques. Choisir `STAGE='copy'`,
+   `CONFIRMATION='PROMOTE_CLEAN_DEV_TO_PROD'`, `JOBS_PAUSED=True` et
+   `DASHBOARD_PAUSED=True`. Exécuter Paramètres puis Exécution. Les 30 tables métier
+   sont remplacées une par une par `DEEP CLONE ... VERSION AS OF`.
+   COPY contrôle les schémas, nombres de lignes et permissions des tables copiées.
+   Aucun `reset`, `TRUNCATE` ni nouveau traitement RAW n'est nécessaire pour PROD.
+   Attendre `STAGE_PASS` avec `copied_tables=30`.
+3. Conserver les confirmations et choisir `STAGE='validate'`. Cette étape reprend
+   les contrôles financiers par rapport à la référence PROD initiale, les motifs
+   de confidentialité connus, la lignée et le bridge. Elle vérifie que les versions
+   contrôlées pendant COPY n'ont pas changé, recrée l'allocation PROD et
+   exécute les scripts de service 04 puis 05. Attendre `PASS`.
+4. Tester les quatre profils et les exports comme indiqué dans
+   `apps/finops_dashboard/security/README.md` avant publication ou reprise des jobs.
 
-1. `platform/common/sql/security/04_create_dashboard_serving_view.sql`;
-2. `platform/common/sql/security/05_validate_dashboard_serving_view.sql`.
+La copie conserve la provenance DEV dans les identifiants d'ingestion, les
+timestamps et batch IDs; ces champs ne représentent pas de nouvelles ingestions
+PROD. OPS reçoit de vrais événements `dev_to_prod_deep_clone_copy` et
+`dev_to_prod_deep_clone_validate`, pas des exécutions mensuelles ou daily inventées.
+Après les contrôles, les statuts mensuels PROD sont associés à la validation de
+promotion : monthly fermés et daily ouverts. Les autorisations ne sont pas clonées;
+seul le libellé PROD approuvé de `APP00013057` est corrigé dans `business_scope`.
 
-Les loaders publient déjà `gold.v_cost_allocation`. Aucun nouveau pipeline, bucket
-ou changement de chemin n'est nécessaire. Valider les profils et les références
-du script 05 comme indiqué dans `apps/finops_dashboard/security/README.md`.
+Les copies profondes sont indépendantes des fichiers DEV. Elles consomment du
+compute, du stockage et éventuellement des coûts de transfert; aucune durée ni
+économie mesurée n'est annoncée. Les 30 remplacements ne sont pas une transaction
+globale : garder le site en maintenance jusqu'au PASS et aux tests des profils.
+Un échec ou une interruption bloque la reprise automatique. Conserver le
+checkpoint et diagnostiquer, sans restauration isolée ni suppression du JSON.
+
+RAW, les catalogues, les schémas, l'historique OPS et les entitlements restent en
+place. Les vues sont recréées pour lire PROD, jamais DEV. Les anciennes versions
+PROD ne sont pas effacées. Le chargement distinct de PROD depuis RAW reste
+possible avec `rebuild_clean_environment` si la promotion est refusée, mais
+uniquement après diagnostic et décision explicite sur le périmètre.
 
 ## Traiter une erreur sans perdre la référence
 
@@ -210,3 +249,4 @@ Références :
 
 - https://docs.databricks.com/gcp/en/sql/language-manual/sql-ref-syntax-ddl-truncate-table
 - https://docs.databricks.com/gcp/en/sql/language-manual/functions/current_metastore
+- https://docs.databricks.com/gcp/en/sql/language-manual/delta-clone

@@ -23,8 +23,12 @@ logic.
 - `operations/initialize_empty_data_tables.ipynb`: manually create all 30 empty
   business tables in DEV or PROD after a complete reset.
 - `operations/rebuild_clean_environment.ipynb`: manual privacy maintenance,
-  DEV then PROD, using existing schemas and verified clean RAW; see
+  rebuild DEV (or replay PROD separately), using existing schemas and verified clean RAW; see
   `docs/privacy_rebuild.md`. Default PLAN changes no managed data.
+- `operations/promote_clean_dev_to_prod.ipynb`: after DEV PASS, manually promote
+  its 30 frozen business tables to PROD by DEEP CLONE, then validate and publish
+  the existing serving views. Replaces the second backfill for this maintenance;
+  does not copy RAW, OPS histories or entitlements. Default PLAN is read-only.
 - `operations/repair_dataset_privacy.ipynb`: retired blocking redirect only,
   retained to stop old bookmarked procedures; never schedule or execute APPLY.
 Automatic archival has no active notebook or Job because RAW is consumed by

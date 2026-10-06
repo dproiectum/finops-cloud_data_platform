@@ -18,4 +18,8 @@ rebuild_dev.json
 rebuild_prod.json
 rebuild_dev.json.tmp
 rebuild_prod.json.tmp
+promote_dev_to_prod.json
+promote_dev_to_prod.json.tmp
+rebuild_*.before-charge-schema-recovery.json
+rebuild_*.before-charge-schema-recovery.json.tmp
 text_mapping.json

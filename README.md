@@ -39,6 +39,10 @@ For historical privacy cleanup without dropping catalogs, follow
 `platform/common/notebooks/operations/rebuild_clean_environment.ipynb` captures
 each environment's baseline, resets business tables only, and reuses the normal
 monthly/daily pipelines. The old targeted text-mapping APPLY is retired.
+After DEV PASS, `platform/common/notebooks/operations/promote_clean_dev_to_prod.ipynb`
+can replace the second full replay with a guarded, independent DEEP CLONE of the
+30 business tables. It preserves PROD references and OPS history, then validates
+the copies and publishes PROD serving views. Do not run both procedures in PROD.
 
 For a fresh installation or a separately approved full catalog reset only:
 Follow [docs/manual_platform_rebuild.md](docs/manual_platform_rebuild.md).
