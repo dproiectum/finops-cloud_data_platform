@@ -16,6 +16,7 @@ from finops_cloud.audit.snapshots import (
 from finops_cloud.config import load_config
 from finops_cloud.medallion.bronze import add_ingestion_metadata
 from finops_cloud.medallion.contract import apply_focus_contract, validate_single_month
+from finops_cloud.medallion.privacy import assert_source_privacy
 from finops_cloud.medallion.delta import (
     append_new_source_files,
     delta_version,
@@ -89,6 +90,7 @@ def run(
     try:
         # 2. Land the authoritative monthly billing file in Bronze.
         raw = spark.read.parquet(source)
+        assert_source_privacy(raw, source)
         bronze = add_ingestion_metadata(raw, run_id, "MONTHLY_BILLING", "FINAL")
         bronze_rows = append_new_source_files(
             spark,

@@ -15,6 +15,7 @@ from finops_cloud.audit.snapshots import ensure_audit_tables
 from finops_cloud.config import load_config
 from finops_cloud.medallion.bronze import add_ingestion_metadata
 from finops_cloud.medallion.contract import apply_focus_contract
+from finops_cloud.medallion.privacy import assert_source_privacy
 from finops_cloud.medallion.delta import append_new_source_files
 from finops_cloud.medallion.gold import refresh_gold_for_month
 from finops_cloud.medallion.silver import (
@@ -41,6 +42,7 @@ def run(environment: str, source_uri: str) -> dict[str, object]:
     try:
         # 2. Bronze keeps source columns and adds technical ingestion metadata.
         raw = spark.read.parquet(source_uri)
+        assert_source_privacy(raw, source_uri)
         source_rows = raw.count()
         if source_rows == 0:
             raise ValueError(f"Daily source is empty: {source_uri}")

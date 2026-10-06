@@ -15,6 +15,8 @@ import pandas as pd
 
 APP = Path(__file__).resolve().parents[2] / "apps/finops_dashboard"
 ROOT = APP.parents[1]
+# This file must also run alone, without another test adding the pipeline source path.
+sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(APP))
 
 from config import DashboardConfig  # noqa: E402
@@ -166,6 +168,21 @@ class AuthorizationTests(unittest.TestCase):
                          .iloc[0]["billed_cost"], 180)
         self.assertEqual(self.source.run(a.application_owners(self.config, "2026-01"))
                          ["application_code"].tolist(), ["APP00013057"])
+
+    def test_application_set_is_uncorrelated_and_rejects_ambiguous_scopes(self):
+        query = self.queries('demo-app-owner-a').available_months(self.config)
+        self.assertIn('OR c.application_code IN (', query.text)
+        self.assertIn('GROUP BY environment, application_code HAVING COUNT(*) = 1', query.text)
+        self.assertNotIn('LEFT JOIN', query.text)
+        self.assertNotIn('b.application_code IN (', query.text)
+        self.assertNotIn('b.application_code = c.application_code', query.text)
+
+    def test_global_admin_does_not_require_any_business_scope_mapping(self):
+        admin = self.queries('demo-finops-admin')
+        self.source.connection.execute('DELETE FROM business_scope')
+        row = self.source.run(admin.executive_summary(self.config, '2026-01')).iloc[0]
+        self.assertEqual(row['charge_lines'], 5)
+        self.assertEqual(row['billed_cost'], 30)
 
     def test_admin_includes_unknown_credits_but_not_other_environment(self):
         admin = self.queries("demo-finops-admin")

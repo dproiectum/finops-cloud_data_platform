@@ -1,0 +1,52 @@
+{
+  "audit_date": "2026-10-06",
+  "policy_version": "organization-text-v1",
+  "status": "HISTORICAL_REPAIR_REQUIRED",
+  "organization_trace_counts_are_not_unique_row_counts_across_columns": true,
+  "local_generator": {
+    "reference": {"files": 2, "rows": 1465438, "findings": "Organization identifiers, organization hostnames and residual non-pseudonymous email addresses found in reference text and JSON."},
+    "daily": {"files": 608, "rows": 3664261, "organization_matches": {"Tags": 112758, "x_SkuDetails": 16444}},
+    "monthly": {"files": 18, "rows": 3279613, "organization_matches": {"Tags": 100847, "x_SkuDetails": 14714}},
+    "legacy_archives": {"files": 3, "rows": 492436, "findings": "Organization traces found; separate verified clean copies created."}
+  },
+  "poc_active_data": {
+    "bronze": {"rows": 164145, "organization_matches": {"Tags": 4932, "x_SkuDetails": 734}},
+    "silver": {"rows": 164145, "organization_matches": {"Tags": 4932, "x_SkuDetails": 734}},
+    "core_warehouse": {"rows": 164145, "organization_matches": {"Tags": 4932, "x_SkuDetails": 734}},
+    "gold_dim_resource": {"rows": 29823, "organization_matches": {"tags_raw": 419, "application_name": 17}},
+    "gold_dim_sku": {"rows": 51280, "organization_matches": {"sku_details": 256}},
+    "gold_dim_tag": {"rows": 23209, "organization_matches": {"tag_value": 24}},
+    "datamart_application_owner": {"rows": 681, "organization_matches": {"application_name": 4}},
+    "historical_delta_files": "Also scanned physically; contain identifying text beyond the active Delta snapshot. Updating the current snapshot does not erase historical files."
+  },
+  "databricks": {
+    "workspace_id": "8259550830613689",
+    "environments_audited": ["dev", "prod"],
+    "matching_findings_in_both_environments": {
+      "bronze_billing": {"rows": 3279613, "organization_matches": {"Tags": 100847, "x_SkuDetails": 14714}},
+      "bronze_daily": {"rows": 13146, "organization_matches": {"Tags": 411, "x_SkuDetails": 65}},
+      "silver_and_central_each": {"rows": 3292759, "organization_matches": {"Tags": 101258, "x_SkuDetails": 14779}},
+      "gold_dim_resource": {"rows": 65419, "organization_matches": {"tags_raw": 346, "application_name": 5}},
+      "gold_dim_sku": {"rows": 366851, "organization_matches": {"sku_details": 583}},
+      "gold_dim_tag": {"rows": 70673, "organization_matches": {"tag_key": 2, "tag_value": 31}},
+      "datamart_application_owner": {"rows": 11317, "organization_matches": {"application_name": 75}}
+    },
+    "prod_serving_view": {"rows": 3292759, "organization_matches": {"application_name": 6737}},
+    "prod_serving_app00013057": {"rows_with_nominative_label": 6044},
+    "ops_business_scope": "The APP00013057 application_name also requires repair; entitlement keys must remain unchanged.",
+    "gcs_monthly_volume_read": {"rows": 3279613, "privacy_flagged_rows_by_column": {"Tags": 100847, "x_SkuDetails": 14714}},
+    "gcs_current_object_identity_check": {"method": "Compare GCS object MD5 metadata with the corresponding fully audited original local Parquet bytes", "daily_parquets_matched": 549, "monthly_parquets_matched": 18, "unmatched_current_parquets": 0, "note": "Only these 567 existing objects should be replaced. Do not upload the additional 59 local daily files as part of historical cleanup. This check excludes noncurrent object versions."},
+    "gcs_daily_full_sql_scan": "Interrupted; current cloud files were instead verified identical to audited local originals through object MD5 comparison.",
+    "gcs_archive_current_objects": "Three folder markers only; no current Parquet objects.",
+    "new_source_guard": "SQL expressions tested against clean and dirty fixtures on the Belgium SQL Warehouse. New daily and monthly ingestion checks occur before a Bronze business-data append."
+  },
+  "prepared_repair": {"strategy": "Operator-executed targeted migration, DEV then PROD", "notebook": "platform/common/notebooks/operations/repair_dataset_privacy.ipynb", "default_mode": "DRY_RUN", "apply_confirmation": "APPLY_DATASET_PRIVACY_REPAIR", "clean_export_parquets": 628, "separate_clean_local_archive_parquets": 3, "export_manifests_status": "PASS", "execution_status": "Not applied to Databricks or GCS; local POC historical data also remains unchanged."},
+  "limits": [
+    "This is a targeted audit of known organization traces and email formats, not proof of complete anonymity or legal compliance.",
+    "Internal application codes, resource naming conventions and free-text personal names require a separate disclosure review.",
+    "Databricks changes were read-only; no GCS object or managed table was overwritten.",
+    "OPS operator identities and execution logs were not scrubbed. Keep their access restricted and review any public export separately.",
+    "A verified clean publication export has its own SHA-256 provenance manifest. It does not replace an immutable generator ledger.",
+    "Before any migration, suspend jobs and dashboard reads, preserve financial baselines, and define rollback and historical file retention."
+  ]
+}

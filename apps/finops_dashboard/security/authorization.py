@@ -68,37 +68,37 @@ def admin_predicate(config: DashboardConfig) -> str:
 
 
 def charge_predicate(config: DashboardConfig, alias: str = "c") -> str:
-    # EXISTS prevents multiple permissions or mapping rows from multiplying costs.
+    # Keep the admin check independent of application scopes. The former nested
+    # correlated EXISTS/LEFT JOIN/IN plan lost application_code during Databricks
+    # SQL optimization. This uncorrelated application set avoids that plan while
+    # IN/EXISTS still prevent multiple permissions from multiplying charges.
     return f"""
         {alias}.environment = :viewer_environment
-        AND EXISTS (
-          SELECT 1 FROM {security_table(config, 'user_entitlement')} e
-          LEFT JOIN {security_table(config, 'business_scope')} b
-            ON b.environment = e.environment AND b.is_active = TRUE
-          WHERE {live_entitlement_predicate()}
-            AND (
-              (e.role = 'FINOPS_ADMIN' AND e.scope_type = 'ALL' AND e.scope_id = '*')
-              OR (
-                  b.application_code = {alias}.application_code
-                  AND b.application_code IS NOT NULL
-                  AND trim(b.application_code) <> ''
-                  AND lower(trim(b.application_code)) <> 'unknown'
-                  AND b.application_code IN (
-                    SELECT application_code
-                    FROM {security_table(config, 'business_scope')}
-                    WHERE environment = :viewer_environment AND is_active = TRUE
-                    GROUP BY application_code HAVING COUNT(*) = 1
-                  )
-                  AND (
-                    (e.role = 'APPLICATION_OWNER' AND e.scope_type = 'APPLICATION'
-                      AND e.scope_id = b.application_code)
-                    OR (e.role = 'DOMAIN_MANAGER' AND e.scope_type = 'DOMAIN'
-                      AND e.scope_id = b.domain_id)
-                    OR (e.role = 'SUBDOMAIN_MANAGER' AND e.scope_type = 'SUBDOMAIN'
-                      AND e.scope_id = b.subdomain_id)
-                  )
+        AND (
+          {admin_predicate(config)}
+          OR {alias}.application_code IN (
+            SELECT b.application_code
+            FROM (
+              SELECT environment, application_code,
+                     MAX(domain_id) AS domain_id, MAX(subdomain_id) AS subdomain_id
+              FROM {security_table(config, 'business_scope')}
+              WHERE environment = :viewer_environment AND is_active = TRUE
+                AND application_code IS NOT NULL AND trim(application_code) <> ''
+                AND lower(trim(application_code)) <> 'unknown'
+              GROUP BY environment, application_code HAVING COUNT(*) = 1
+            ) b
+            JOIN {security_table(config, 'user_entitlement')} e
+              ON e.environment = b.environment
+            WHERE {live_entitlement_predicate()}
+              AND (
+                (e.role = 'APPLICATION_OWNER' AND e.scope_type = 'APPLICATION'
+                  AND e.scope_id = b.application_code)
+                OR (e.role = 'DOMAIN_MANAGER' AND e.scope_type = 'DOMAIN'
+                  AND e.scope_id = b.domain_id)
+                OR (e.role = 'SUBDOMAIN_MANAGER' AND e.scope_type = 'SUBDOMAIN'
+                  AND e.scope_id = b.subdomain_id)
               )
-            )
+          )
         )
     """
 

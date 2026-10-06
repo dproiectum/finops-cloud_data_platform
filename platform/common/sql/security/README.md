@@ -39,7 +39,7 @@ those emails access.
 | Demo principal | Role | Environment | Scope |
 |---|---|---|---|
 | `demo-finops-admin` | `FINOPS_ADMIN` | `prod` | `ALL`, `*` |
-| `demo-app-owner-a` | `APPLICATION_OWNER` | `prod` | `APPLICATION`, `APP00013057` — TEN Data Platform |
+| `demo-app-owner-a` | `APPLICATION_OWNER` | `prod` | `APPLICATION`, `APP00013057` — Data Platform (target anonymized label; existing data requires repair) |
 | `demo-app-owner-b` | `APPLICATION_OWNER` | `prod` | `APPLICATION`, `BSN0003965` — ServiceNow |
 | `demo-no-access` | No entitlement | — | Must be denied by the future application |
 
@@ -90,6 +90,47 @@ operational pages must not be exposed to restricted application owners.
 These metadata checks are not substitutes for the step 8 authorization tests.
 Keep the public portfolio unchanged while testing those controls
 separately. Any later IAP deployment requires a separate private-service plan.
+
+## Historical dataset privacy repair — manual operation
+
+The audit recorded in `privacy_audit_20261006.json` found organization labels,
+hostnames and residual email addresses in source JSON and downstream dimensions.
+A dashboard-only replacement is insufficient. The independent generator now
+produces sanitized text; ingestion guards reject the known residual patterns.
+This targeted policy is not proof of complete anonymity.
+
+1. Synchronize the Cloud Platform and Generator code to GitHub, then pull their
+   Git folders in Belgium. The maintenance notebook imports the generator's
+   checksum-pinned pure text policy, not its datasets.
+2. Pause DEV/PROD ingestion, promotion jobs and dashboard reads. Publish the
+   verified clean copies to the SAME existing GCS object paths. There are 18
+   monthly and 549 daily Parquet objects in the current GCS inventory. Do not
+   upload the additional 59 local daily files during this repair; do not upload
+   the reference Parquets. Never delete the bucket or source tree.
+3. Open `platform/common/notebooks/operations/repair_dataset_privacy.ipynb` on
+   Spark compute. Confirm its `POLICY_FILE` points to the Generator Git folder.
+   Keep `ENVIRONMENT = "dev"` and `CONFIRMATION = ""`. Run the read-only plan.
+4. Review findings. Set `CONFIRMATION = "APPLY_DATASET_PRIVACY_REPAIR"` only when
+   clean source publication and the pause are complete. The notebook verifies
+   loaded source copies before updates, prints Delta recovery versions, repairs
+   tag-key relationships, refreshes marts, and checks financial baselines.
+   Save the recovery output. Stop on an error: updates across tables are not one
+   atomic transaction, and a failed run must be investigated before any retry.
+5. After DEV returns `PASS`, repeat the dry-run and explicit apply in PROD.
+   Execute `05_validate_dashboard_serving_view.sql`, clear/restart the dashboard
+   cache, and verify Owner A, Owner B, FinOps Admin and No Access again. Only
+   then resume jobs and dashboard reads. No financial backfill is required.
+
+Clean local release: `FinOps Data Generator/privacy_exports/release-20261006/`.
+Use `datasets/focus/` for cloud source copies; `datasets/reference/` is private
+generator input and `archive/` is a separate local archive export. Each export
+root has a verification manifest. Originals, generator ledger, active POC data,
+old Delta snapshots, noncurrent GCS versions and operator logs are not erased.
+Keep identifying historical material restricted. Any retention cleanup or POC
+rebuild is a separate operation, not part of this migration.
+
+The notebook has local structural/unit coverage; it has NOT yet been applied
+on Databricks. The DEV execution remains the required integration validation.
 
 ## Technical references
 

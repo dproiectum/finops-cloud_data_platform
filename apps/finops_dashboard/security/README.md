@@ -30,6 +30,18 @@ not receive backend credentials or direct SQL access. A public synthetic dataset
 and its public service are not a secure deployment for confidential business data.
 People who already have direct Databricks access retain their separate UC rights.
 
+### Databricks SQL predicate compatibility
+
+The global-admin check is independent of the application set. Restricted scopes
+are an uncorrelated `IN` subquery over active, uniquely mapped applications and
+live entitlements. This replaces the nested correlated `EXISTS`/`LEFT JOIN`/`IN`
+shape that failed in the Belgian SQL Warehouse with "Cannot find column index
+for attribute application_code". Permissions are unchanged: duplicate active
+scope mappings fail closed, multiple grants do not duplicate charges, and expiry,
+revocation and environment checks still run in SQL on every protected query.
+After updating this Python module, restart local Streamlit to clear old imports.
+No pipeline reload, SQL view recreation or entitlement reseeding is required.
+
 ## Step 7.1 — Create the serving view manually
 
 In SQL Editor of workspace-belgium, using the existing Warehouse
