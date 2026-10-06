@@ -48,6 +48,8 @@ class PrivacyRepairTests(unittest.TestCase):
         compile(code, str(file), 'exec')
         self.assertIn("CONFIRMATION = ''", code)
         self.assertIn('EXPECTED_POLICY_SHA256', code)
+        self.assertIn('privacy_policy.sanitize_text(None) is not None', code)
+        self.assertLess(code.index('privacy_policy.sanitize_text(None)'), code.index('result = run('))
         self.assertNotIn('billing_backfill', code)
         for path in (ROOT / 'platform').rglob('*.yml'):
             self.assertNotIn('repair_dataset_privacy', path.read_text())
