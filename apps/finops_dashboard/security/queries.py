@@ -1,12 +1,13 @@
 """Protected counterparts of ALL dashboard queries.
 
-The serving view is unfiltered charge-grain data. Every business query applies
-live entitlements before aggregating. It is never queried by public mode.
+Serving views retain charge/application-grain data. Every business query applies
+live entitlements before aggregating. Real DBU telemetry needs a verified admin.
 """
 
 from __future__ import annotations
 
 import re
+from consumption import azure_history_body
 
 from .authorization import (
     AccessContext, BoundQuery, admin_predicate, charge_predicate, viewer_parameters,
@@ -29,8 +30,11 @@ class ScopedQueries:
                     or expected is None or self.context.is_admin != (expected[0] == 'FINOPS_ADMIN')):
                 raise SecurityError("Invalid portfolio demonstration context.")
 
-    def _query(self, config, body: str, month: str | None = None) -> BoundQuery:
+    def _query(self, config, body: str, month: str | None = None, *,
+               source_view: str = 'v_dashboard_charge_scoped') -> BoundQuery:
         self._validate(config)
+        if source_view not in {'v_dashboard_charge_scoped', 'v_consumption_monthly'}:
+            raise SecurityError('Unsupported scoped serving view.')
         bindings = viewer_parameters(self.context)
         if month is not None:
             if not re.fullmatch(r"[0-9]{4}-(0[1-9]|1[0-2])", month):
@@ -45,7 +49,7 @@ class ScopedQueries:
             else:
                 sandbox = ' AND ' + admin_predicate(config)
         text = f"""WITH authorized_rows AS (
-            SELECT c.* FROM {config.datamart('v_dashboard_charge_scoped')} c
+            SELECT c.* FROM {config.datamart(source_view)} c
             WHERE {charge_predicate(config)}{sandbox}
         ) {body}"""
         return BoundQuery(text, tuple(bindings.items()))
@@ -59,6 +63,32 @@ class ScopedQueries:
     def available_months(self, config):
         return self._query(config, """SELECT DISTINCT billing_month FROM authorized_rows
             WHERE billing_month IS NOT NULL ORDER BY billing_month DESC""")
+
+    def consumption_months(self, config):
+        return self._query(config, """SELECT DISTINCT billing_month FROM authorized_rows
+            WHERE billing_month IS NOT NULL ORDER BY billing_month DESC""",
+            source_view='v_consumption_monthly')
+
+    def consumption_history(self, config, year):
+        if not isinstance(year, str) or not re.fullmatch(r'[0-9]{4}', year):
+            raise SecurityError('Invalid consumption year.')
+        statement = self._query(
+            config, azure_history_body('billing_month LIKE :consumption_year'),
+            source_view='v_consumption_monthly',
+        )
+        return BoundQuery(statement.text, (*statement.bindings, ('consumption_year', f'{year}-%')))
+
+    def databricks_consumption(self, config):
+        # Local/selectable demo admins are not authenticated operational viewers.
+        if (self.context.identity.provider != 'iap' or self.context.portfolio_demo
+                or self.context.environment != 'prod'):
+            raise SecurityError('Real DBU telemetry requires a verified private PROD administrator.')
+        return self._ops(config, f"""SELECT usage_month, workspace_label, sku_name,
+            billing_origin_product, usage_unit, is_genie_free_usage,
+            net_dbu, billing_records, first_available_usage_date, last_available_usage_date
+            FROM `{config.operations_catalog}`.`monitoring`.`v_databricks_consumption_monthly`
+            WHERE {admin_predicate(config)}
+            ORDER BY usage_month DESC, workspace_label, sku_name, billing_origin_product""")
 
     def executive_history(self, config):
         return self._query(config, """SELECT billing_month, COUNT(*) AS charge_lines,

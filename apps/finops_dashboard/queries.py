@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import re
+
 from config import DashboardConfig
+from consumption import azure_history_body
 
 
 def _literal(value: str) -> str:
@@ -16,6 +19,22 @@ def available_months(config: DashboardConfig) -> str:
         WHERE billing_month IS NOT NULL
         ORDER BY billing_month DESC
     """
+
+
+def consumption_months(config: DashboardConfig) -> str:
+    return f"""SELECT DISTINCT billing_month
+        FROM {config.datamart('v_consumption_monthly')}
+        WHERE environment = '{_literal(config.environment)}' AND billing_month IS NOT NULL
+        ORDER BY billing_month DESC"""
+
+
+def consumption_history(config: DashboardConfig, year: str) -> str:
+    if not isinstance(year, str) or not re.fullmatch(r'[0-9]{4}', year):
+        raise ValueError('Invalid consumption year.')
+    return f"""WITH authorized_rows AS (
+        SELECT * FROM {config.datamart('v_consumption_monthly')}
+        WHERE environment = '{_literal(config.environment)}'
+    ) {azure_history_body(f"billing_month LIKE '{year}-%'")}"""
 
 
 def executive_summary(config: DashboardConfig, month: str) -> str:

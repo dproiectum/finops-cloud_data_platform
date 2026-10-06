@@ -45,6 +45,31 @@ def percent(value: object, *, signed: bool = False) -> str:
     return f"{decimal_number(value, signed=signed)} %"
 
 
+def measurement_number(value: object) -> str:
+    """European quantity display; missing is not zero, and tiny values stay visible."""
+    if value is None or pd.isna(value):
+        return '—'
+    numeric = float(value)
+    rendered = (f'{numeric:.3e}' if 0 < abs(numeric) < 0.000001
+                else f'{numeric:,.6f}'.rstrip('0').rstrip('.'))
+    return rendered.translate(str.maketrans({',': '\u202f', '.': ','}))
+
+
+def consumption_table(frame: pd.DataFrame):
+    """Readable measures on a copy, with source precision and signed values retained."""
+    labels = {column: column_label(column) for column in frame.columns}
+    display = frame.rename(columns=labels)
+    formatters = {}
+    for column in frame.columns:
+        if column in {'consumed_quantity', 'net_dbu'}:
+            formatters[labels[column]] = measurement_number
+        elif column.endswith('_rows') or column == 'billing_records':
+            formatters[labels[column]] = integer
+        elif column.endswith('_date'):
+            formatters[labels[column]] = lambda value: pd.to_datetime(value).strftime('%d/%m/%Y')
+    return display.style.format(formatters, na_rep='—')
+
+
 def column_label(column: object) -> str:
     """Business-facing headers only; source/query identifiers stay unchanged."""
     aliases = {
@@ -57,6 +82,9 @@ def column_label(column: object) -> str:
         "usage_on_demand": "Usage On-Demand",
         "month_change_rate": "Month-over-Month Change Rate",
         "critical_completeness_rate": "Critical Completeness Rate",
+        "net_dbu": "Net DBUs",
+        "is_genie_free_usage": "Genie Free Usage",
+        "missing_measurement_rows": "Missing Measurements",
     }
     name = str(column)
     if name in aliases:

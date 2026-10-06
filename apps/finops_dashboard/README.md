@@ -14,11 +14,61 @@ tables and the environment-aware `finops_ops.audit` history.
 - **Allocation & Accountability**: cost centers, services, subscriptions and
   application owners;
 - **Resources**: resources, regions and resource groups;
+- **Consumption**: monthly synthetic Azure Usage by service, SKU and consumed unit;
+  measurement completeness, signed corrections, and explicit carbon unavailability.
+  Real Databricks DBUs remain disabled in public/demo/portfolio modes;
 - **Operations & Quality**: critical completeness, pipeline runs, reconciliation
   and DEV/PROD audit separation;
 - **Architecture**: end-to-end lineage, Medallion layers and certified products.
 
 The application never writes to Unity Catalog.
+
+## Consumption rollout (no ingestion reload)
+
+First run the manual SQL files `00` through `05` in
+`platform/common/sql/consumption/` and check every assertion, not only the final
+result tables. They create ordinary views over the already available data.
+No daily/monthly Job, source Parquet or existing serving view is changed.
+
+The Consumption page reads `finops_prod.datamart.v_consumption_monthly` with the
+existing Databricks backend. The backend needs SELECT on this view and USE on
+its catalog/schema; existing schema-level SELECT may already cover it. In
+protected modes, the same live environment/application entitlement predicate
+used by other pages filters application-grain rows **before** quantities and
+quality counters are aggregated. Protected results do not use a shared cache.
+
+Choose a year/month in the sidebar, then a service, SKU and unit. Each chart
+contains exactly this combination, never a total of incompatible units or
+different SKUs. Only loaded months are plotted. The July 2026 check supplied
+loaded Usage dates of July 1–2, not a complete July bill. Missing quantities stay
+unavailable, real zeroes stay zero, and negative quantities remain signed.
+Measurement coverage reports availability of quantity/unit pairs, not full-month
+completeness. Quantities and counts use European display formatting; the stored
+precision is unchanged. Tiny non-zero quantities use scientific notation instead
+of rounding visibly to zero.
+
+The Databricks tab makes **no operational billing query** in `public`, `demo` or
+`portfolio_demo`, even for a selectable administrator and even if the activation
+flag is set. For a separately deployed private service, it requires all of:
+
+- `FINOPS_AUTH_MODE=iap` and a verified IAP identity;
+- PROD configuration and an active `FINOPS_ADMIN / ALL / *` entitlement;
+- explicit `FINOPS_ENABLE_DATABRICKS_CONSUMPTION=true`;
+- least-privilege backend access to
+  `finops_ops.monitoring.v_databricks_consumption_monthly`, reviewed separately.
+
+This change does not deploy IAP, add real-user entitlements, grant telemetry
+access, or publish real DBUs. The SQL repeats the live admin check. Signed
+ORIGINAL/RETRACTION/RESTATEMENT records are preserved by the underlying view,
+and Genie free usage is separated from other DBUs. These quantities cover the
+two workspaces' available activity, not an exact FinOps-job allocation, monetary
+cost comparison, energy measurement or carbon estimate.
+
+After manual source rollout/deployment, open **Consumption**. Missing view or
+permission errors stop the page with no fallback dataset. The public query cache
+can last five minutes; protected pages query permissions afresh. No pipeline
+rerun or new warehouse is needed. Carbon remains explicitly **Unavailable** until
+an appropriate verified emissions dataset and method are introduced separately.
 
 Amounts, percentages and counts use European display formatting (for example,
 `912 000,00 €`, `14,66 %` and `164 145`), including financial tables and monetary

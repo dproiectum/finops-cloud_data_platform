@@ -13,8 +13,13 @@ from charts import (
     charge_cost_chart, comparable_years, savings_cost_chart, service_cost_chart, year_history,
 )
 from data_access import DatabricksDataSource
+from consumption import (
+    azure_consumption_chart, consumption_series, databricks_consumption_enabled,
+    dimension_options, measurement_summary,
+)
 from formatting import (
-    SAVINGS_COMPONENTS, chart_layout, comparison_state, financial_table, integer, money, percent,
+    SAVINGS_COMPONENTS, chart_layout, comparison_state, consumption_table,
+    financial_table, integer, measurement_number, money, percent,
     savings_detail_table,
 )
 from knowledge import cost_formulas, focus_columns, glossary
@@ -597,6 +602,157 @@ def resources_page(month: str) -> None:
         )
 
 
+def consumption_page(month: str) -> None:
+    page_title(
+        'FINOPS · CONSUMPTION', 'Consumption & Sustainability',
+        'Existing consumption records only — no estimated carbon emissions',
+    )
+    azure_tab, dbu_tab, carbon_tab = st.tabs(
+        ['Azure Consumption', 'Databricks DBUs', 'Carbon Availability']
+    )
+    with azure_tab:
+        st.caption('Synthetic Azure data · Usage charges only · authorized application scope')
+        history = load_frame(queries.consumption_history(config, month[:4]))
+        monthly = history.loc[history['billing_month'].eq(month)].copy()
+        if monthly.empty:
+            st.info('No Usage consumption records are available for this selection. Missing is not zero.')
+        else:
+            summary = measurement_summary(monthly)
+            cards = st.columns(4)
+            cards[0].metric('Usage Rows', integer(summary['usage_rows']))
+            cards[1].metric('Measurement Coverage',
+                            '—' if summary['coverage_pct'] is None else percent(summary['coverage_pct']))
+            cards[2].metric('Missing Measurements', integer(summary['missing_measurement_rows']))
+            cards[3].metric('Negative Quantity Rows', integer(summary['negative_quantity_rows']))
+            if pd.notna(summary['first_date']) and pd.notna(summary['last_date']):
+                st.info(
+                    f"Loaded Usage dates for {month}: {summary['first_date']:%d/%m/%Y} "
+                    f"to {summary['last_date']:%d/%m/%Y}. "
+                    'These dates do not certify that the month is complete.'
+                )
+            if summary['missing_measurement_rows']:
+                st.warning(
+                    'Some Usage rows have no usable quantity or unit. They remain in the '
+                    'coverage counts and detailed table; missing quantities are not replaced by zero.'
+                )
+            st.caption(
+                'Hours, GB and other units are not added together. Even identical unit labels '
+                'can describe different meters: choose one service, SKU and unit. '
+                'Signed quantities, including negative corrections, are retained.'
+            )
+            chart_source = history.dropna(subset=['service_name', 'sku_id', 'consumed_unit'])
+            if chart_source.empty:
+                st.info('No known service/SKU/unit combination is available for a chart.')
+            else:
+                services = dimension_options(chart_source, 'service_name')
+                month_services = dimension_options(
+                    chart_source.loc[chart_source['billing_month'].eq(month)], 'service_name',
+                )
+                service = st.selectbox('Service Name', services,
+                                       index=services.index(month_services[0]) if month_services else 0,
+                                       key='consumption_service')
+                service_rows = chart_source.loc[chart_source['service_name'].eq(service)]
+                skus = dimension_options(service_rows, 'sku_id')
+                month_skus = dimension_options(service_rows.loc[service_rows['billing_month'].eq(month)], 'sku_id')
+                sku = st.selectbox('SKU ID', skus,
+                                   index=skus.index(month_skus[0]) if month_skus else 0,
+                                   key='consumption_sku')
+                sku_rows = service_rows.loc[service_rows['sku_id'].eq(sku)]
+                units = dimension_options(sku_rows, 'consumed_unit')
+                month_units = dimension_options(sku_rows.loc[sku_rows['billing_month'].eq(month)], 'consumed_unit')
+                unit = st.selectbox('Consumed Unit', units,
+                                    index=units.index(month_units[0]) if month_units else 0,
+                                    key='consumption_unit')
+                series = consumption_series(chart_source, service, sku, unit)
+                selected = series.loc[series['billing_month'].eq(month)]
+                quantity = None if selected.empty else selected.iloc[0]['consumed_quantity']
+                st.metric('Consumed Quantity', measurement_number(quantity),
+                          help=f'{month} · {unit} · one service and SKU. No loaded measurement is not zero.')
+                if selected.empty:
+                    st.info('This combination has no loaded row in the selected month; its other loaded months are shown.')
+                st.plotly_chart(azure_consumption_chart(series), width='stretch')
+                st.caption(
+                    f'Unit: {unit}. The chart covers loaded months in {month[:4]}, not a full-year total. '
+                    'Missing months are not filled with zero. Partial months must not be compared as full months.'
+                )
+            st.subheader('Detailed Consumption Table')
+            st.dataframe(consumption_table(monthly.drop(columns='billing_month')),
+                         hide_index=True, width='stretch')
+
+    with dbu_tab:
+        enabled = databricks_consumption_enabled(
+            mode, access, os.getenv('FINOPS_ENABLE_DATABRICKS_CONSUMPTION'),
+        )
+        if not enabled:
+            st.info(
+                'Real Databricks billing telemetry is not published in this view. '
+                'It requires a private authenticated FinOps administrator and explicit activation. '
+                'A selectable portfolio Admin profile does not grant this access.'
+            )
+        else:
+            databricks_consumption_page()
+
+    with carbon_tab:
+        st.info('Carbon Emissions: Unavailable — no verified emissions dataset is connected.')
+        st.write(
+            'Azure consumption here is synthetic. Databricks DBUs describe platform usage, '
+            'not electricity or carbon emissions. Neither source supplies a validated energy '
+            'or emissions factor for these services. No kWh or kgCO₂e is inferred from cost, '
+            'Hours, GB or DBUs.'
+        )
+        st.caption('This page adds no source modification, ingestion run or carbon-estimation pipeline.')
+
+
+def databricks_consumption_page() -> None:
+    # Recheck before querying: never rely only on a hidden tab or navigation.
+    if not databricks_consumption_enabled(
+        mode, access, os.getenv('FINOPS_ENABLE_DATABRICKS_CONSUMPTION'),
+    ):
+        st.error('Operational consumption access is refused.')
+        return
+    history = load_frame(queries.databricks_consumption(config))
+    if history.empty:
+        st.info('No DBU telemetry is available, or administrator access was revoked. No zero total is inferred.')
+        return
+    dbu_month = st.selectbox('Usage Month', sorted(history['usage_month'].unique(), reverse=True),
+                             key='dbu_usage_month')
+    workspace = st.selectbox('Workspace', ['All Project Workspaces',
+                             *sorted(history['workspace_label'].unique())], key='dbu_workspace')
+    monthly = history.loc[history['usage_month'].eq(dbu_month)].copy()
+    scoped_history = history
+    if workspace != 'All Project Workspaces':
+        monthly = monthly.loc[monthly['workspace_label'].eq(workspace)]
+        scoped_history = history.loc[history['workspace_label'].eq(workspace)]
+    if monthly.empty:
+        st.info('No matching DBU records. Missing data is not zero usage.')
+        return
+    free = monthly['is_genie_free_usage'].eq(True)
+    cards = st.columns(2)
+    cards[0].metric('Net DBUs Excluding Genie Free Usage',
+                    measurement_number(monthly.loc[~free, 'net_dbu'].sum(min_count=1)))
+    cards[1].metric('Genie Free Usage DBUs',
+                    measurement_number(monthly.loc[free, 'net_dbu'].sum(min_count=1)))
+    st.warning(
+        'Workspace activity, not an exact allocation to DEV, PROD or one pipeline. '
+        'DBUs are not monetary cost: SKUs have different prices. Genie free usage is shown separately. '
+        'The current month is partial, and earlier billing can still receive corrections.'
+    )
+    other = scoped_history.loc[~scoped_history['is_genie_free_usage'].eq(True)]
+    trend = other.groupby('usage_month', as_index=False)['net_dbu'].sum(min_count=1)
+    if not trend.empty:
+        figure = go.Figure(go.Bar(
+            x=trend['usage_month'], y=pd.to_numeric(trend['net_dbu']), marker_color='#0078d4',
+            customdata=[[measurement_number(value)] for value in trend['net_dbu']],
+            hovertemplate='%{x}<br>Net DBUs: %{customdata[0]}<extra></extra>',
+        ))
+        figure.update_layout(title='Net DBUs by Available Month — Excluding Genie Free Usage')
+        figure.update_xaxes(title='Usage Month', type='category')
+        figure.update_yaxes(title='Net DBUs', tickformat=',.6~f', zeroline=True)
+        st.plotly_chart(chart_layout(figure, 420), width='stretch')
+    st.subheader('Detailed DBU Table')
+    st.dataframe(consumption_table(monthly), hide_index=True, width='stretch')
+
+
 def operations_page(month: str) -> None:
     if access is not None and not access.is_admin:
         st.error("Operations access is restricted to FinOps administrators.")
@@ -714,8 +870,9 @@ def architecture_page() -> None:
         if access is not None:
             st.info(
                 "Protected pages use v_dashboard_charge_scoped, a charge-grain view of Silver, "
-                "with live viewer permissions applied before aggregation. Public pages keep "
-                "the existing global datamarts."
+                "for costs and v_consumption_monthly for quantities, with live application "
+                "permissions applied before aggregation. Public pages use global synthetic "
+                "datamarts and the synthetic consumption view."
             )
         columns = st.columns(6)
         for column, title, description in zip(
@@ -754,6 +911,7 @@ def architecture_page() -> None:
                         "Accountability",
                     ),
                     ("Quality", "dm_data_quality_monthly", "Completeness and freshness"),
+                    ("Consumption", "v_consumption_monthly", "Synthetic Usage quantities by SKU and unit"),
                     ("Operations", "finops_ops.audit.*", "Runs, snapshots and reconciliation"),
                 ],
                 columns=["Subject", "Certified Source", "Purpose"],
@@ -779,6 +937,7 @@ pages = [
     st.Page(lambda: allocation_page(selected_month), title="Allocation & Accountability",
             url_path="allocation"),
     st.Page(lambda: resources_page(selected_month), title="Resources", url_path="resources"),
+    st.Page(lambda: consumption_page(selected_month), title="Consumption", url_path="consumption"),
     st.Page(knowledge_page, title="Knowledge Base", url_path="knowledge"),
     st.Page(architecture_page, title="Architecture", url_path="architecture"),
 ]
@@ -805,7 +964,8 @@ with st.sidebar:
     comparison_year = None
     if needs_month:
         try:
-            month_frame = load_frame(queries.available_months(config))
+            month_frame = load_frame(queries.consumption_months(config) if navigation.title == 'Consumption'
+                                    else queries.available_months(config))
             months = sorted(month_frame["billing_month"].astype(str).unique(), reverse=True)
         except Exception:
             st.error("Certified datamarts are unavailable")
