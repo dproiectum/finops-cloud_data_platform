@@ -9,14 +9,15 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from config import DashboardConfig
-from carbon.view import render_carbon_scenario
+from about import render_about, render_about_me
+from carbon.view import render_azure_emissions, render_carbon_scenario, render_scenario_controls
 from charts import (
     charge_cost_chart, comparable_years, lineage_chart, savings_cost_chart,
     service_cost_chart, year_history,
 )
 from data_access import DatabricksDataSource
 from consumption import (
-    azure_consumption_chart, consumption_series, databricks_consumption_enabled,
+    azure_consumption_chart, consumption_series,
     dimension_options, measurement_summary,
 )
 from formatting import (
@@ -610,12 +611,14 @@ def resources_page(month: str) -> None:
 
 def consumption_page(month: str) -> None:
     page_title(
-        'FINOPS · CONSUMPTION', 'Consumption & Sustainability',
+        'FINOPS · CONSUMPTION', 'Consumption & Emission',
         'Synthetic consumption and an illustrative electricity-emissions scenario',
     )
-    azure_tab, dbu_tab, carbon_tab = st.tabs(
-        ['Azure Consumption', 'Databricks DBUs', 'Illustrative Carbon']
-    )
+    azure_tab, carbon_tab = st.tabs(['Azure', 'Illustrative Carbon'])
+    # Render the controls in their original tab first, so both views use the
+    # current widget values in this run without duplicating the controls.
+    with carbon_tab:
+        scenario = render_scenario_controls()
     with azure_tab:
         st.caption('Synthetic Azure data · Usage charges only · authorized application scope')
         history = load_frame(queries.consumption_history(config, month[:4]))
@@ -683,75 +686,13 @@ def consumption_page(month: str) -> None:
                     f'Unit: {unit}. The chart covers loaded months in {month[:4]}, not a full-year total. '
                     'Missing months are not filled with zero. Partial months must not be compared as full months.'
                 )
+            detail = render_azure_emissions(monthly, scenario)
             st.subheader('Detailed Consumption Table')
-            st.dataframe(consumption_table(monthly.drop(columns='billing_month')),
+            st.dataframe(consumption_table(detail.drop(columns='billing_month')),
                          hide_index=True, width='stretch')
 
-    with dbu_tab:
-        enabled = databricks_consumption_enabled(
-            mode, access, os.getenv('FINOPS_ENABLE_DATABRICKS_CONSUMPTION'),
-        )
-        if not enabled:
-            st.info(
-                'Real Databricks billing telemetry is not published in this view. '
-                'It requires a private authenticated FinOps administrator and explicit activation. '
-                'A selectable portfolio Admin profile does not grant this access.'
-            )
-        else:
-            databricks_consumption_page()
-
     with carbon_tab:
-        render_carbon_scenario(history, month)
-
-
-def databricks_consumption_page() -> None:
-    # Recheck before querying: never rely only on a hidden tab or navigation.
-    if not databricks_consumption_enabled(
-        mode, access, os.getenv('FINOPS_ENABLE_DATABRICKS_CONSUMPTION'),
-    ):
-        st.error('Operational consumption access is refused.')
-        return
-    history = load_frame(queries.databricks_consumption(config))
-    if history.empty:
-        st.info('No DBU telemetry is available, or administrator access was revoked. No zero total is inferred.')
-        return
-    dbu_month = st.selectbox('Usage Month', sorted(history['usage_month'].unique(), reverse=True),
-                             key='dbu_usage_month')
-    workspace = st.selectbox('Workspace', ['All Project Workspaces',
-                             *sorted(history['workspace_label'].unique())], key='dbu_workspace')
-    monthly = history.loc[history['usage_month'].eq(dbu_month)].copy()
-    scoped_history = history
-    if workspace != 'All Project Workspaces':
-        monthly = monthly.loc[monthly['workspace_label'].eq(workspace)]
-        scoped_history = history.loc[history['workspace_label'].eq(workspace)]
-    if monthly.empty:
-        st.info('No matching DBU records. Missing data is not zero usage.')
-        return
-    free = monthly['is_genie_free_usage'].eq(True)
-    cards = st.columns(2)
-    cards[0].metric('Net DBUs Excluding Genie Free Usage',
-                    measurement_number(monthly.loc[~free, 'net_dbu'].sum(min_count=1)))
-    cards[1].metric('Genie Free Usage DBUs',
-                    measurement_number(monthly.loc[free, 'net_dbu'].sum(min_count=1)))
-    st.warning(
-        'Workspace activity, not an exact allocation to DEV, PROD or one pipeline. '
-        'DBUs are not monetary cost: SKUs have different prices. Genie free usage is shown separately. '
-        'The current month is partial, and earlier billing can still receive corrections.'
-    )
-    other = scoped_history.loc[~scoped_history['is_genie_free_usage'].eq(True)]
-    trend = other.groupby('usage_month', as_index=False)['net_dbu'].sum(min_count=1)
-    if not trend.empty:
-        figure = go.Figure(go.Bar(
-            x=trend['usage_month'], y=pd.to_numeric(trend['net_dbu']), marker_color=COST_BLUE,
-            customdata=[[measurement_number(value)] for value in trend['net_dbu']],
-            hovertemplate='%{x}<br>Net DBUs: %{customdata[0]}<extra></extra>',
-        ))
-        figure.update_layout(title='Net DBUs by Available Month — Excluding Genie Free Usage')
-        figure.update_xaxes(title='Usage Month', type='category')
-        figure.update_yaxes(title='Net DBUs', tickformat=',.2f', zeroline=True)
-        st.plotly_chart(chart_layout(figure, 420), width='stretch')
-    st.subheader('Detailed DBU Table')
-    st.dataframe(consumption_table(monthly), hide_index=True, width='stretch')
+        render_carbon_scenario(history, month, scenario=scenario)
 
 
 def operations_page(month: str) -> None:
@@ -900,9 +841,11 @@ pages = [
     st.Page(lambda: allocation_page(selected_month), title="Allocation & Accountability",
             url_path="allocation"),
     st.Page(lambda: resources_page(selected_month), title="Resources", url_path="resources"),
-    st.Page(lambda: consumption_page(selected_month), title="Consumption", url_path="consumption"),
+    st.Page(lambda: consumption_page(selected_month), title="Consumption & Emission", url_path="consumption"),
     st.Page(knowledge_page, title="Knowledge Base", url_path="knowledge"),
     st.Page(architecture_page, title="Architecture", url_path="architecture"),
+    st.Page(render_about, title="About the Project", url_path="about"),
+    st.Page(render_about_me, title="About Me", url_path="about-me"),
 ]
 if access is None or access.is_admin:
     pages.insert(5, st.Page(lambda: operations_page(selected_month), title="Operations & Quality",
@@ -920,14 +863,16 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
     st.divider()
-    needs_month = navigation.title not in {"Knowledge Base", "Architecture"}
+    needs_month = navigation.title not in {
+        "Knowledge Base", "Architecture", "About the Project", "About Me"
+    }
     selected_month = None
     overview_view = "Monthly"
     selected_year = None
     comparison_year = None
     if needs_month:
         try:
-            month_frame = load_frame(queries.consumption_months(config) if navigation.title == 'Consumption'
+            month_frame = load_frame(queries.consumption_months(config) if navigation.title == 'Consumption & Emission'
                                     else queries.available_months(config))
             months = sorted(month_frame["billing_month"].astype(str).unique(), reverse=True)
         except Exception:

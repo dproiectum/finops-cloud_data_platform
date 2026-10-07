@@ -61,16 +61,8 @@ def comparison_chart(row: pd.Series, primary: dict, comparison: dict) -> go.Figu
     return chart_layout(figure, 350)
 
 
-def render_carbon_scenario(history: pd.DataFrame, month: str) -> None:
-    st.warning(
-        'Illustrative scenario based on synthetic usage and assumed energy consumption. '
-        'These are not measured Azure, Google Cloud or Databricks emissions.'
-    )
-    st.write(
-        'Scope: Virtual Machines and Virtual Machine Scale Sets billed in Hours only. '
-        'One eligible billing hour is assumed to represent one equivalent VM-hour. '
-        'All included SKUs use the same assumed power; actual machine size and utilization are unknown.'
-    )
+def render_scenario_controls() -> Scenario:
+    """Render one shared set of assumptions before either consumption tab runs."""
     metadata = load_grid_references()
     references = {row['region']: row for row in metadata['references']}
     label = lambda code: f"{references[code]['location']} · {code} · 2025 grid reference"
@@ -105,6 +97,92 @@ def render_carbon_scenario(history: pd.DataFrame, month: str) -> None:
         'No carbon-free-energy percentage or offset is applied.'
     )
     st.markdown(f"Grid reference source: [{metadata['source_title']}]({metadata['source_url']})")
+    return scenario
+
+
+def service_emissions_chart(estimated: pd.DataFrame) -> go.Figure:
+    """One selected month, eligible groups only, summed before display rounding."""
+    if estimated['billing_month'].nunique() != 1:
+        raise ValueError('Service emissions chart requires one loaded billing month.')
+    modelled = estimated.loc[estimated['scenario_status'].eq(MODELLED)]
+    services = modelled.groupby('service_name', as_index=False)[[
+        'scenario_vm_hours', 'scenario_energy_kwh', 'scenario_kgco2e'
+    ]].sum(min_count=1).dropna(subset=['scenario_kgco2e'])
+    services = services.sort_values('scenario_kgco2e', ascending=False)
+    figure = go.Figure(go.Bar(
+        x=services['scenario_kgco2e'], y=services['service_name'], orientation='h',
+        marker_color=COST_BLUE,
+        customdata=[
+            [measurement_number(row.scenario_kgco2e), measurement_number(row.scenario_vm_hours),
+             measurement_number(row.scenario_energy_kwh)]
+            for row in services.itertuples()
+        ],
+        hovertemplate=(
+            '%{y}<br>Illustrative Emissions: %{customdata[0]} kgCO₂e'
+            '<br>Modelled VM Billing Hours: %{customdata[1]}'
+            '<br>Scenario Energy: %{customdata[2]} kWh<extra></extra>'
+        ),
+    ))
+    figure.update_layout(title='Illustrative Emissions by Service', showlegend=False)
+    figure.update_yaxes(autorange='reversed', title=None)
+    figure.update_xaxes(title='Illustrative Emissions (kgCO₂e)', tickformat=',.2f', rangemode='tozero')
+    return chart_layout(figure, max(300, 40 * len(services) + 140))
+
+
+def render_azure_emissions(monthly: pd.DataFrame, scenario: Scenario) -> pd.DataFrame:
+    """Enrich authorized consumption for display only; never overwrite usage."""
+    estimated = estimate_scenario(monthly, scenario)
+    detail = monthly.copy(deep=True)
+    detail['scenario_kgco2e'] = estimated['scenario_kgco2e']
+    detail['estimation_status'] = estimated['scenario_status']
+    references = {row['region']: row for row in load_grid_references()['references']}
+    primary = references[scenario.primary_region]
+    st.subheader('Illustrative Emissions by Service')
+    st.caption(
+        'Illustrative electricity-emissions scenario, not measured Azure emissions. '
+        'Only eligible Virtual Machines and Virtual Machine Scale Sets groups billed in Hours '
+        'are modelled; missing, unsupported and signed-correction groups are not estimated. '
+        'This is not the total carbon footprint of the Azure portfolio.'
+    )
+    st.caption(
+        f"Shared assumptions: {measurement_number(scenario.power_watts)} W per equivalent VM · "
+        f"PUE {measurement_number(scenario.pue)} · {primary['location']} hypothetical grid · "
+        f"2025 intensity {measurement_number(primary['grid_gco2e_per_kwh'])} gCO₂e/kWh. "
+        'Uses the assumptions configured in the Illustrative Carbon tab. '
+        'The graph covers the detailed table for the selected month, not the service/SKU filter above.'
+    )
+    coverage = monthly_scenarios(estimated).iloc[0]
+    st.caption(
+        f"{integer(coverage['modelled_usage_rows'])} modelled / "
+        f"{integer(coverage['usage_rows'])} loaded Usage rows · {coverage['period_status']}. "
+        'Row coverage is not emissions coverage.'
+    )
+    if estimated['scenario_kgco2e'].notna().any():
+        st.plotly_chart(service_emissions_chart(estimated), width='stretch')
+    else:
+        st.info('Not Estimated — no eligible VM-hour groups for this month. No zero is fabricated.')
+    return detail
+
+
+def render_carbon_scenario(
+    history: pd.DataFrame, month: str, *, scenario: Scenario | None = None,
+) -> None:
+    st.warning(
+        'Illustrative scenario based on synthetic usage and assumed energy consumption. '
+        'These are not measured Azure, Google Cloud or Databricks emissions.'
+    )
+    st.write(
+        'Scope: Virtual Machines and Virtual Machine Scale Sets billed in Hours only. '
+        'One eligible billing hour is assumed to represent one equivalent VM-hour. '
+        'All included SKUs use the same assumed power; actual machine size and utilization are unknown.'
+    )
+    if scenario is None:
+        scenario = render_scenario_controls()
+    else:
+        st.caption('These assumptions also apply to the consumption table and emissions chart in the Azure tab.')
+    metadata = load_grid_references()
+    references = {row['region']: row for row in metadata['references']}
+    primary, comparison = references[scenario.primary_region], references[scenario.comparison_region]
 
     with st.expander('Method and Interpretation Limits'):
         st.code(
@@ -121,7 +199,7 @@ def render_carbon_scenario(history: pd.DataFrame, month: str) -> None:
         st.write(
             'An entire month/service/SKU/unit group is excluded if any measurement is missing '
             'or negative, the SKU is unknown, or counters are inconsistent. Negative corrections '
-            'remain unchanged on the Azure Consumption tab. Row coverage is not energy or '
+            'remain unchanged on the Azure tab. Row coverage is not energy or '
             'emissions coverage. No uncertainty interval is claimed: physical VM mapping, '
             'actual energy and region are not known.'
         )

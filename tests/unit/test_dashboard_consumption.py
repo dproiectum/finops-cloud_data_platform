@@ -205,7 +205,7 @@ class DashboardConsumptionTests(unittest.TestCase):
 
     def test_public_consumption_page_renders_without_any_operational_query(self):
         def choose_page(pages, *, position):
-            return next(page for page in pages if page.title == 'Consumption')
+            return next(page for page in pages if page.title == 'Consumption & Emission')
 
         with (
             patch.dict(os.environ, {'FINOPS_AUTH_MODE': 'public',
@@ -217,13 +217,13 @@ class DashboardConsumptionTests(unittest.TestCase):
         ):
             app = AppTest.from_file(str(APP / 'app.py'), default_timeout=30).run()
             self.assertFalse(app.exception)
+            self.assertEqual(app.title[0].value, 'Consumption & Emission')
             self.assertEqual([tab.label for tab in app.tabs],
-                             ['Azure Consumption', 'Databricks DBUs', 'Illustrative Carbon'])
+                             ['Azure', 'Illustrative Carbon'])
             self.assertEqual(next(item.value for item in app.metric if item.label == 'Consumed Quantity'), '-2,00')
             self.assertEqual(len(app.get('plotly_chart')), 1)
             chart = json.loads(app.get('plotly_chart')[0].proto.spec)
             self.assertEqual(chart['layout']['yaxis']['title']['text'], 'Consumed Quantity (Hours)')
-            self.assertTrue(any('not published' in item.value for item in app.info))
             self.assertTrue(any('Not Estimated' in item.value for item in app.info))
             self.assertTrue(any('not measured' in item.value for item in app.warning))
             self.assertFalse(any('monitoring' in sql or 'system.billing' in sql
@@ -235,7 +235,7 @@ class DashboardConsumptionTests(unittest.TestCase):
 
     def test_portfolio_owner_page_renders_only_authorized_consumption(self):
         def choose_page(pages, *, position):
-            return next(page for page in pages if page.title == 'Consumption')
+            return next(page for page in pages if page.title == 'Consumption & Emission')
 
         with (
             patch.dict(os.environ, {'FINOPS_AUTH_MODE': 'portfolio_demo',
@@ -253,11 +253,57 @@ class DashboardConsumptionTests(unittest.TestCase):
             self.assertNotIn(999, detail['Consumed Quantity'].tolist())
             self.assertFalse(any('monitoring' in sql for sql, _ in self.source.calls))
 
-    def test_private_administrator_dbu_page_renders_with_separate_usage_period(self):
+    def test_azure_emissions_use_authorized_rows_and_update_both_tabs(self):
+        self.source.connection.executescript('''
+            INSERT INTO consumption VALUES
+              ('prod','2026-02','APP00013057','Virtual Machines','VM1','Hours',1000,10,10,0,0,'2026-02-01','2026-02-02'),
+              ('prod','2026-02','BSN0003965','Virtual Machines','VM1','Hours',9000,10,10,0,0,'2026-02-01','2026-02-02');
+        ''')
+
+        def choose_page(pages, *, position):
+            return next(page for page in pages if page.title == 'Consumption & Emission')
+
+        with (
+            patch.dict(os.environ, {'FINOPS_AUTH_MODE': 'portfolio_demo',
+                                   'FINOPS_PORTFOLIO_DATA_APPROVED': 'true'}, clear=True),
+            patch.object(DatabricksDataSource, 'healthcheck'),
+            patch.object(DatabricksDataSource, 'query', side_effect=self.source.query),
+            patch.object(st, 'Page', CallablePage),
+            patch.object(st, 'navigation', side_effect=choose_page),
+        ):
+            app = AppTest.from_file(str(APP / 'app.py'), default_timeout=30).run()
+            app.selectbox(key='portfolio_profile').set_value('demo-app-owner-a').run()
+            self.assertFalse(app.exception)
+            self.assertEqual(len(app.number_input), 2)
+            self.assertEqual(len(app.tabs[1].number_input), 2)
+            self.assertFalse(app.tabs[0].number_input)
+            self.assertNotIn('Carbon Scenario Assumptions', [item.label for item in app.expander])
+            detail = app.dataframe[0].value
+            vm = detail.loc[detail['Service Name'].eq('Virtual Machines')].iloc[0]
+            self.assertEqual(vm['Consumed Quantity'], 1000)
+            self.assertAlmostEqual(vm['Illustrative Emissions (kgCO₂e)'], 7.56)
+            self.assertTrue(detail.loc[detail['Service Name'].eq('Compute'),
+                                       'Illustrative Emissions (kgCO₂e)'].isna().all())
+            app.number_input(key='carbon_power_watts').set_value(100).run()
+            self.assertFalse(app.exception)
+            detail = app.dataframe[0].value
+            vm = detail.loc[detail['Service Name'].eq('Virtual Machines')].iloc[0]
+            self.assertAlmostEqual(vm['Illustrative Emissions (kgCO₂e)'], 15.12)
+            metric = next(item.value for item in app.metric
+                          if item.label == 'Illustrative Emissions (kgCO₂e)')
+            self.assertEqual(metric, '15,12')
+            service_chart = next(json.loads(chart.proto.spec) for chart in app.get('plotly_chart')
+                                 if json.loads(chart.proto.spec)['layout']['title']['text']
+                                 == 'Illustrative Emissions by Service')
+            self.assertEqual(service_chart['data'][0]['customdata'][0][0], '15,12')
+            self.assertFalse(any('monitoring' in sql or 'system.billing' in sql
+                                 for sql, _ in self.source.calls))
+
+    def test_consumption_has_no_dbu_tab_or_query_even_for_private_administrator(self):
         self.source.grant('verified-admin', 'FINOPS_ADMIN', 'ALL', '*', provider='iap')
 
         def choose_page(pages, *, position):
-            return next(page for page in pages if page.title == 'Consumption')
+            return next(page for page in pages if page.title == 'Consumption & Emission')
 
         with (
             patch.dict(os.environ, {'FINOPS_AUTH_MODE': 'iap', 'FINOPS_IAP_AUDIENCE': 'test-audience',
@@ -270,16 +316,13 @@ class DashboardConsumptionTests(unittest.TestCase):
         ):
             app = AppTest.from_file(str(APP / 'app.py'), default_timeout=30).run()
             self.assertFalse(app.exception)
-            self.assertEqual([metric.value for metric in app.metric if metric.label in {
-                'Net DBUs Excluding Genie Free Usage', 'Genie Free Usage DBUs',
-            }], ['6,00', '2,00'])
-            self.assertEqual(app.selectbox(key='dbu_usage_month').value, '2026-09')
+            self.assertEqual([tab.label for tab in app.tabs], ['Azure', 'Illustrative Carbon'])
+            self.assertFalse([metric for metric in app.metric if 'DBU' in metric.label])
+            self.assertNotIn('dbu_usage_month', [widget.key for widget in app.selectbox])
             self.assertEqual(app.selectbox(key='billing_month').value, '2026-02')
-            self.assertEqual(len(app.get('plotly_chart')), 2)
+            self.assertEqual(len(app.get('plotly_chart')), 1)
             calls = [(sql, bindings) for sql, bindings in self.source.calls if 'monitoring' in sql]
-            self.assertEqual(len(calls), 1)
-            self.assertEqual(calls[0][1]['viewer_provider'], 'iap')
-            self.assertEqual(calls[0][1]['viewer_subject'], 'verified-admin')
+            self.assertFalse(calls)
 
     def test_unavailable_consumption_view_stops_without_global_fallback(self):
         def unavailable(sql, parameters=None):
@@ -293,7 +336,7 @@ class DashboardConsumptionTests(unittest.TestCase):
             patch.object(DatabricksDataSource, 'query', side_effect=unavailable),
             patch.object(st, 'Page', CallablePage),
             patch.object(st, 'navigation', side_effect=lambda pages, position: next(
-                page for page in pages if page.title == 'Consumption')),
+                page for page in pages if page.title == 'Consumption & Emission')),
         ):
             app = AppTest.from_file(str(APP / 'app.py'), default_timeout=30).run()
             self.assertFalse(app.exception)

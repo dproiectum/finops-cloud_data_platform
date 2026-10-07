@@ -14,12 +14,26 @@ tables and the environment-aware `finops_ops.audit` history.
 - **Allocation & Accountability**: cost centers, services, subscriptions and
   application owners;
 - **Resources**: resources, regions and resource groups;
-- **Consumption**: monthly synthetic Azure Usage by service, SKU and consumed unit;
+- **Consumption & Emission**: monthly synthetic Azure Usage by service, SKU and consumed unit;
   measurement completeness, signed corrections, and a labelled illustrative carbon scenario.
-  Real Databricks DBUs remain disabled in public/demo/portfolio modes;
+  The **Azure** tab includes illustrative kgCO₂e and estimation status in its detailed
+  table, plus a descending service-emissions chart. Only eligible VM/VM Scale Sets
+  Hour groups are modelled; unavailable estimates remain missing, never fabricated
+  zeros. Assumption controls remain only in Illustrative Carbon and also update
+  the Azure tab, using the same model and existing authorized data.
+  Only **Azure** and **Illustrative Carbon** sub-tabs remain. Platform Databricks
+  costs and DBU estimates belong to **About the Project → Project Costs**;
 - **Operations & Quality**: critical completeness, pipeline runs, reconciliation
   and DEV/PROD audit separation;
 - **Architecture**: end-to-end lineage, Medallion layers and certified products.
+- **About the Project** (`/about`): project overview, a guide to every page and
+  the actual technology stack. Its **Project Costs** tab presents reviewed monthly
+  GCP costs and Databricks list-cost estimates, kept separate from the synthetic
+  Azure portfolio. The initial snapshot is empty, not zero. See
+  `project_costs/README.md` for source export, validation and the proposed automatic
+  monitoring rollout. Project Costs is not a separate main navigation entry.
+- **About Me** (`/about-me`): a short engineering profile and a clickable contact
+  address. No academic status or unverified biography is added.
 
 The application never writes to Unity Catalog.
 
@@ -74,24 +88,16 @@ precision is unchanged. Measures display exactly two decimal places; counts rema
 integers and missing measurements display `—`. Small non-zero values may round
 visibly to `0,00`, but are not replaced by zero in data or calculations.
 
-The Databricks tab makes **no operational billing query** in `public`, `demo` or
-`portfolio_demo`, even for a selectable administrator and even if the activation
-flag is set. For a separately deployed private service, it requires all of:
+The Databricks sub-tab and its rendering code have been removed. Consumption &
+Emission makes **no operational billing query**, including for a private IAP
+administrator. Existing monitoring views, SQL source scripts and query-level
+authorization are retained; this change drops no Databricks table or grant.
+Approved platform DBUs and cost estimates are served only through the reviewed
+Project Costs snapshot under About the Project, not raw live billing telemetry.
+Databricks emissions remain unestimated: DBUs alone are not an energy measurement
+or a supported conversion to kgCO2e.
 
-- `FINOPS_AUTH_MODE=iap` and a verified IAP identity;
-- PROD configuration and an active `FINOPS_ADMIN / ALL / *` entitlement;
-- explicit `FINOPS_ENABLE_DATABRICKS_CONSUMPTION=true`;
-- least-privilege backend access to
-  `finops_ops.monitoring.v_databricks_consumption_monthly`, reviewed separately.
-
-This change does not deploy IAP, add real-user entitlements, grant telemetry
-access, or publish real DBUs. The SQL repeats the live admin check. Signed
-ORIGINAL/RETRACTION/RESTATEMENT records are preserved by the underlying view,
-and Genie free usage is separated from other DBUs. These quantities cover the
-two workspaces' available activity, not an exact FinOps-job allocation, monetary
-cost comparison, energy measurement or carbon estimate.
-
-After manual source rollout/deployment, open **Consumption**. Missing view or
+After manual source rollout/deployment, open **Consumption & Emission**. Missing view or
 permission errors stop the page with no fallback dataset. The public query cache
 can last five minutes; protected pages query permissions afresh. No pipeline
 rerun or new warehouse is needed. Measured carbon reporting remains unavailable;
@@ -99,7 +105,7 @@ the separate what-if scenario described below does not replace a provider report
 
 ### Illustrative Carbon (read-only teaching scenario)
 
-The third Consumption tab reuses the **already authorized** synthetic Usage history;
+The Illustrative Carbon tab reuses the **already authorized** synthetic Usage history;
 it adds no query, table, SQL rollout, pipeline or dependency. It models only
 `Virtual Machines` and `Virtual Machine Scale Sets` with the exact unit `Hours`.
 One eligible billing hour hypothetically equals one equivalent VM-hour, with

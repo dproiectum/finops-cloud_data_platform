@@ -382,11 +382,13 @@ class DashboardPresentationTests(unittest.TestCase):
             self.assertIn('"type":"category"', app.get("plotly_chart")[1].proto.spec)
             titles = ["Executive Overview", "Cost Drivers", "Savings",
                       "Allocation & Accountability", "Resources", "Operations & Quality",
-                      "Knowledge Base", "Architecture"]
+                      "Knowledge Base", "Architecture",
+                      "About the Project", "About Me"]
             for title in titles:
                 with self.subTest(page=title):
                     def choose_page(pages, *, position):
                         self.assertEqual(position, "top")
+                        self.assertNotIn("Project Costs", [page.title for page in pages])
                         return next(page for page in pages if page.title == title)
 
                     with patch.object(st, "Page", CallablePage), patch.object(
@@ -394,6 +396,8 @@ class DashboardPresentationTests(unittest.TestCase):
                     ):
                         app = AppTest.from_file(str(APP / "app.py"), default_timeout=30).run()
                         self.assertFalse(app.exception)
+                        if title in {"About the Project", "About Me"}:
+                            self.assertFalse(app.sidebar.selectbox)
                         for table in app.dataframe:
                             self.assertFalse(any("_" in column for column in table.value.columns))
                         if title == "Savings":

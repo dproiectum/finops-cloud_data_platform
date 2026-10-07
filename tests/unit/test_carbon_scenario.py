@@ -18,7 +18,7 @@ sys.path.insert(0, str(APP))
 
 from carbon import Scenario, estimate_scenario, load_grid_references, monthly_scenarios
 from carbon.scenario import MODELLED
-from carbon.view import monthly_chart, comparison_chart
+from carbon.view import monthly_chart, comparison_chart, service_emissions_chart
 from config import DashboardConfig
 from formatting import consumption_table
 from security import demo_identity, resolve_access
@@ -150,6 +150,98 @@ class CarbonScenarioTests(unittest.TestCase):
         for expected in ['Modelled VM Billing Hours', 'Scenario Energy (kWh)', 'kgCO₂e', '7,56', '1\u202f000', '—']:
             self.assertIn(expected, html)
         self.assertNotIn('€', html)
+
+    def test_service_chart_sorts_modelled_groups_and_excludes_unknown_emissions(self):
+        source = pd.DataFrame([
+            usage(), usage(sku_id='VM2', consumed_quantity=100),
+            usage(sku_id='VM3', service_name='Virtual Machine Scale Sets', consumed_quantity=2000),
+            usage(sku_id='APP', service_name='Azure App Service', consumed_quantity=999999),
+            usage(sku_id='CORRECTION', negative_quantity_rows=1),
+        ])
+        estimated = estimate_scenario(source, Scenario())
+        figure = service_emissions_chart(estimated)
+        self.assertEqual(list(figure.data[0].y), ['Virtual Machine Scale Sets', 'Virtual Machines'])
+        self.assertAlmostEqual(figure.data[0].x[0], 15.12)
+        self.assertAlmostEqual(figure.data[0].x[1], 8.316)
+        self.assertEqual(figure.data[0].customdata[1][0], '8,32')
+        self.assertEqual(figure.data[0].customdata[1][1], '1\u202f100,00')
+        self.assertEqual(figure.layout.separators, ',\u202f')
+        self.assertEqual(figure.layout.yaxis.autorange, 'reversed')
+        with self.assertRaises(ValueError):
+            service_emissions_chart(pd.concat([
+                estimated, estimated.assign(billing_month='2026-07')
+            ], ignore_index=True))
+
+    def test_service_chart_keeps_real_zero_but_not_unestimated_services(self):
+        estimated = estimate_scenario(pd.DataFrame([
+            usage(consumed_quantity=0),
+            usage(sku_id='OTHER', service_name='Storage', consumed_unit='GB'),
+        ]), Scenario())
+        figure = service_emissions_chart(estimated)
+        self.assertEqual(list(figure.data[0].y), ['Virtual Machines'])
+        self.assertEqual(list(figure.data[0].x), [0])
+        self.assertFalse(service_emissions_chart(estimated.iloc[1:]).data[0].x.size)
+
+    def test_azure_table_chart_and_carbon_tab_share_live_assumptions(self):
+        rows = [usage(), usage(sku_id='OTHER', service_name='Azure App Service')]
+        script = '''
+import sys
+sys.path.insert(0, APP_PATH)
+import pandas as pd
+import streamlit as st
+from carbon.view import render_scenario_controls, render_azure_emissions, render_carbon_scenario
+from formatting import consumption_table
+history = pd.DataFrame(ROWS)
+scenario = render_scenario_controls()
+detail = render_azure_emissions(history, scenario)
+st.dataframe(consumption_table(detail.drop(columns='billing_month')))
+render_carbon_scenario(history, '2026-06', scenario=scenario)
+'''.replace('APP_PATH', repr(str(APP))).replace('ROWS', repr(rows))
+        app = AppTest.from_string(script, default_timeout=30).run()
+        self.assertFalse(app.exception)
+        self.assertEqual(len(app.number_input), 2)
+        self.assertEqual(len(app.selectbox), 2)
+
+        def check(expected):
+            self.assertFalse(app.exception)
+            detail = app.dataframe[0].value
+            self.assertAlmostEqual(detail['Illustrative Emissions (kgCO₂e)'].iloc[0], expected)
+            self.assertTrue(pd.isna(detail['Illustrative Emissions (kgCO₂e)'].iloc[1]))
+            self.assertIn('unsupported service', detail['Estimation Status'].iloc[1])
+            self.assertEqual(detail['Consumed Quantity'].tolist(), [1000.0, 1000.0])
+            carbon_metric = next(item.value for item in app.metric
+                                 if item.label == 'Illustrative Emissions (kgCO₂e)')
+            self.assertEqual(carbon_metric, f'{expected:.2f}'.replace('.', ','))
+            chart = json.loads(app.get('plotly_chart')[0].proto.spec)
+            self.assertEqual(chart['layout']['title']['text'], 'Illustrative Emissions by Service')
+            self.assertIn(f'{expected:.2f}'.replace('.', ','), str(chart['data'][0]['customdata']))
+
+        check(7.56)
+        app.number_input(key='carbon_power_watts').set_value(100).run()
+        check(15.12)
+        app.selectbox(key='carbon_primary_region').set_value('europe-west9').run()
+        check(1.92)
+
+    def test_unestimated_azure_details_preserve_signed_usage_without_chart(self):
+        script = '''
+import sys
+sys.path.insert(0, APP_PATH)
+import pandas as pd
+import streamlit as st
+from carbon import Scenario
+from carbon.view import render_azure_emissions
+from formatting import consumption_table
+detail = render_azure_emissions(pd.DataFrame(ROWS), Scenario())
+st.dataframe(consumption_table(detail))
+'''.replace('APP_PATH', repr(str(APP))).replace('ROWS', repr([usage(consumed_quantity=-5)]))
+        app = AppTest.from_string(script, default_timeout=30).run()
+        self.assertFalse(app.exception)
+        self.assertFalse(app.get('plotly_chart'))
+        detail = app.dataframe[0].value
+        self.assertEqual(detail['Consumed Quantity'].iloc[0], -5)
+        self.assertTrue(pd.isna(detail['Illustrative Emissions (kgCO₂e)'].iloc[0]))
+        self.assertIn('signed correction group', detail['Estimation Status'].iloc[0])
+        self.assertTrue(any('No zero' in item.value for item in app.info))
 
     def test_live_scope_precedes_scenario_and_revocation_has_no_fallback(self):
         source = ConsumptionFixture()
