@@ -11,7 +11,8 @@ import streamlit as st
 from config import DashboardConfig
 from carbon.view import render_carbon_scenario
 from charts import (
-    charge_cost_chart, comparable_years, savings_cost_chart, service_cost_chart, year_history,
+    charge_cost_chart, comparable_years, lineage_chart, savings_cost_chart,
+    service_cost_chart, year_history,
 )
 from data_access import DatabricksDataSource
 from consumption import (
@@ -19,7 +20,7 @@ from consumption import (
     dimension_options, measurement_summary,
 )
 from formatting import (
-    SAVINGS_COMPONENTS, chart_layout, comparison_state, consumption_table,
+    COST_BLUE, SAVINGS_GREEN, SAVINGS_COMPONENTS, chart_layout, comparison_state, consumption_table,
     financial_table, integer, measurement_number, money, percent,
     savings_detail_table,
 )
@@ -47,36 +48,38 @@ st.markdown(
     [data-testid="stMetric"] {
       background:transparent;
       border:1px solid color-mix(in srgb, currentColor 25%, transparent);
-      border-radius:6px;
-      padding:15px 17px; box-shadow:0 1px 3px rgba(0,0,0,.08);
+      border-top:3px solid #00b894; border-radius:12px;
+      padding:22px 24px; box-shadow:none;
     }
     [data-testid="stMetricValue"], [data-testid="stMetricLabel"] { color:inherit; }
     .st-key-catalog_price_comparison_positive [data-testid="stMetricValue"] { color:#16803d; }
     .st-key-catalog_price_comparison_negative [data-testid="stMetricValue"] { color:#d83b3b; }
-    h1, h2, h3 { letter-spacing:-.02em; }
-    .finops-kicker { color:inherit; font-weight:700; letter-spacing:.11em; font-size:.78rem; }
+    h1, h2, h3 { letter-spacing:-.025em; }
+    .finops-kicker { color:inherit; font-weight:600; letter-spacing:.10em; font-size:.73rem; }
     .finops-subtitle { color:inherit; margin-top:-.7rem; margin-bottom:1.2rem; }
     .status-pill {
       display:inline-block; padding:.3rem .65rem; border-radius:999px;
-      color:#005a9e; background:#eff6fc; border:1px solid #c7e0f4; font-size:.82rem;
+      color:inherit; background:transparent; border:1px solid #00b894; font-size:.78rem;
     }
     .architecture-card {
       background:transparent; color:inherit;
       border:1px solid color-mix(in srgb, currentColor 25%, transparent);
-      border-top:4px solid #0078d4;
-      border-radius:6px; padding:18px; min-height:132px;
-      box-shadow:0 1px 3px rgba(0,0,0,.06);
+      border-top:3px solid #00b894;
+      border-radius:12px; padding:18px; min-height:132px;
+      box-shadow:none;
     }
     .architecture-card h4 { color:inherit; margin:0 0 8px 0; }
     .architecture-card p { color:inherit; margin:0; line-height:1.45; }
-    /* Plotly explicitly draws dark text on white in chart_layout(). */
+    /* Financial charts follow the live native theme; lineage is deliberately
+       a separate, fixed white diagram matching the original public view. */
     div[data-testid="stPlotlyChart"] {
-      background:#ffffff; border:1px solid #e1dfdd; border-radius:6px;
-      box-shadow:0 1px 3px rgba(0,0,0,.06); padding:4px;
+      background:transparent;
+      border:1px solid color-mix(in srgb, currentColor 25%, transparent);
+      border-radius:12px; box-shadow:none; padding:4px;
     }
     div[data-testid="stDataFrame"] {
       border:1px solid color-mix(in srgb, currentColor 25%, transparent);
-      border-radius:6px; padding:4px;
+      border-radius:12px; padding:4px;
     }
     </style>
     """,
@@ -102,16 +105,18 @@ try:
         persona = st.sidebar.selectbox("Demo Identity", DEMO_PERSONAS, key="demo_identity")
         identity = demo_identity(persona)
     elif mode == "portfolio_demo":
-        st.info(
-            "Synthetic dataset — role-based access demonstration. "
-            "Select a profile to explore its authorized scope. "
-            "Profile selection is not user authentication."
-        )
         persona = st.sidebar.selectbox(
             "Explore as", PORTFOLIO_PERSONAS, key="portfolio_profile",
             format_func=lambda subject: PORTFOLIO_LABELS[subject],
         )
-        st.sidebar.caption("Public demonstration · fixed synthetic profiles")
+        st.sidebar.caption("Synthetic data · demo profiles")
+        with st.sidebar.expander("About This Demo", expanded=False):
+            st.write(
+                "This portfolio uses synthetic data and fixed demonstration profiles. "
+                "Select a profile to explore its authorized scope. "
+                "Profile selection is not user authentication and does not grant "
+                "access to real operational billing data."
+            )
         identity = demo_identity(persona)
     elif mode == "iap":
         identity = iap_identity(st.context.headers, os.environ["FINOPS_IAP_AUDIENCE"].strip())
@@ -276,9 +281,9 @@ def executive_page(month: str) -> None:
             y="daily_billed_cost",
             title="Daily Billed Cost",
             labels={"date": "Date", "daily_billed_cost": "Billed Cost (€)"},
-            color_discrete_sequence=["#0078d4"],
+            color_discrete_sequence=[COST_BLUE],
         )
-        figure.update_traces(line=dict(width=2), fillcolor="rgba(0,120,212,.16)")
+        figure.update_traces(line=dict(width=2), fillcolor="rgba(0,90,158,.15)")
         st.plotly_chart(chart_layout(figure), width="stretch")
     with right:
         figure = px.bar(
@@ -287,7 +292,7 @@ def executive_page(month: str) -> None:
             y="monthly_billed_cost",
             title="Monthly Billed Cost Trend",
             labels={"billing_month": "Month", "monthly_billed_cost": "Billed Cost (€)"},
-            color_discrete_sequence=["#00a4ef"],
+            color_discrete_sequence=[COST_BLUE],
         )
         figure.update_xaxes(type="category")
         st.plotly_chart(chart_layout(figure), width="stretch")
@@ -345,7 +350,7 @@ def executive_annual_page(year: str, other_year: str | None = None) -> None:
             chart_frame, x="month_number", y="billed_cost", color="year", barmode="group",
             title="Billed Cost: Same Months, Two Years",
             labels={"month_number": "Month Number", "billed_cost": "Billed Cost (€)", "year": "Year"},
-            color_discrete_sequence=["#0078d4", "#8a8886"],
+            color_discrete_sequence=[COST_BLUE, "#94a3b8"],
         )
         figure.update_xaxes(type="category", categoryorder="array", categoryarray=common)
         st.dataframe(financial_table(chart_frame.drop(columns="month_number")),
@@ -354,7 +359,7 @@ def executive_annual_page(year: str, other_year: str | None = None) -> None:
         figure = px.bar(
             annual, x="billing_month", y="billed_cost", title="Billed Cost by Loaded Month",
             labels={"billing_month": "Month", "billed_cost": "Billed Cost (€)"},
-            color_discrete_sequence=["#0078d4"],
+            color_discrete_sequence=[COST_BLUE],
         )
         figure.update_xaxes(type="category")
         st.dataframe(financial_table(annual), hide_index=True, width="stretch")
@@ -456,7 +461,7 @@ def savings_page(month: str) -> None:
         y="total_savings",
         title="Realized Savings by Month",
         labels={"billing_month": "Month", "total_savings": "Realized Savings (€)"},
-        color_discrete_sequence=["#8fd5a6"],
+        color_discrete_sequence=[SAVINGS_GREEN],
     )
     figure.update_traces(
         customdata=[
@@ -529,7 +534,7 @@ def allocation_page(month: str) -> None:
                 centers.sort_values("total_billed_cost"), x="total_billed_cost", y="cost_center",
                 orientation="h", title="Cost Center Allocation",
                 labels={"total_billed_cost": "Billed Cost (€)", "cost_center": "Cost Center"},
-                color_discrete_sequence=["#0078d4"],
+                color_discrete_sequence=[COST_BLUE],
             )
             st.caption("Signed bars retain credits and non-positive cost-center totals.")
         else:
@@ -538,7 +543,7 @@ def allocation_page(month: str) -> None:
                 path=["cost_center"],
                 values="total_billed_cost",
                 color="total_billed_cost",
-                color_continuous_scale=["#deecf9", "#71afe5", "#0078d4", "#005a9e"],
+                color_continuous_scale=["#e8f6f3", "#78c7c0", COST_BLUE, "#003b68"],
                 title="Cost Center Allocation",
                 labels={"total_billed_cost": "Billed Cost (€)", "cost_center": "Cost Center"},
             )
@@ -590,7 +595,7 @@ def resources_page(month: str) -> None:
             orientation="h",
             title="Cost by Resource Group",
             labels={"total_billed_cost": "Cost (€)", "resource_group_name": "Resource Group"},
-            color_discrete_sequence=["#0078d4"],
+            color_discrete_sequence=[COST_BLUE],
         )
         st.plotly_chart(chart_layout(figure, 560), width="stretch")
         st.dataframe(financial_table(groups), hide_index=True, width="stretch")
@@ -737,7 +742,7 @@ def databricks_consumption_page() -> None:
     trend = other.groupby('usage_month', as_index=False)['net_dbu'].sum(min_count=1)
     if not trend.empty:
         figure = go.Figure(go.Bar(
-            x=trend['usage_month'], y=pd.to_numeric(trend['net_dbu']), marker_color='#0078d4',
+            x=trend['usage_month'], y=pd.to_numeric(trend['net_dbu']), marker_color=COST_BLUE,
             customdata=[[measurement_number(value)] for value in trend['net_dbu']],
             hovertemplate='%{x}<br>Net DBUs: %{customdata[0]}<extra></extra>',
         ))
@@ -821,47 +826,9 @@ def architecture_page() -> None:
         ["Data Lineage", "Medallion Layers", "Certified Products"]
     )
     with lineage_tab:
-        labels = [
-            "GCS Parquet",
-            "RAW Volume",
-            "Bronze",
-            "FOCUS Contract",
-            "Silver",
-            "Gold",
-            "Datamarts",
-            "Streamlit",
-            "OPS Audit",
-        ]
-        links = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7), (2, 8), (4, 8), (5, 8)]
-        figure = go.Figure(
-            go.Sankey(
-                arrangement="snap",
-                node=dict(
-                    label=labels,
-                    color=[
-                        "#0078d4",
-                        "#2b88d8",
-                        "#2b88d8",
-                        "#71afe5",
-                        "#71afe5",
-                        "#00a4ef",
-                        "#50e6ff",
-                        "#deecf9",
-                        "#8764b8",
-                    ],
-                    pad=24,
-                    thickness=24,
-                    line=dict(color="#005a9e", width=1),
-                ),
-                link=dict(
-                    source=[item[0] for item in links],
-                    target=[item[1] for item in links],
-                    value=[1] * len(links),
-                    color="rgba(0,120,212,.20)",
-                ),
-            )
-        )
-        st.plotly_chart(chart_layout(figure, 590), width="stretch")
+        # Do not let financial palettes or Streamlit recolor the original diagram.
+        st.plotly_chart(lineage_chart(), theme=None, width="stretch")
+        st.caption("Logical lineage only. Link widths do not represent row counts or cost.")
     with layers_tab:
         if access is not None:
             st.info(
@@ -870,9 +837,9 @@ def architecture_page() -> None:
                 "permissions applied before aggregation. Public pages use global synthetic "
                 "datamarts and the synthetic consumption view."
             )
-        columns = st.columns(6)
+        columns = st.columns(3)
         for column, title, description in zip(
-            columns,
+            [*columns, *st.columns(3)],
             ["RAW", "Bronze", "Contract", "Silver", "Gold", "Datamarts"],
             [
                 "Shared external Parquet evidence",

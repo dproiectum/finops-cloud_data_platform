@@ -590,6 +590,15 @@ class ProtectedDashboardTests(unittest.TestCase):
             patch('data_access.DatabricksDataSource', return_value=self.source),
         ):
             app = AppTest.from_file(str(APP / 'app.py'), default_timeout=30).run()
+            self.assertTrue(any(item.value == 'Synthetic data · demo profiles'
+                                for item in app.sidebar.caption))
+            self.assertFalse(any('Synthetic dataset — role-based access demonstration'
+                                 in item.value for item in app.info))
+            demo_note = next(item for item in app.sidebar.expander
+                             if item.label == 'About This Demo')
+            self.assertFalse(demo_note.proto.expanded)
+            self.assertTrue(any('Profile selection is not user authentication' in item.value
+                                for item in demo_note.markdown))
             app.selectbox(key='billing_month').select('2026-01').run()
             self.assertEqual(app.metric[0].value, '30,00 €')
             app.selectbox(key='portfolio_profile').select('demo-app-owner-a').run()

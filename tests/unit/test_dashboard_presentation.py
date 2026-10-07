@@ -5,6 +5,7 @@ import ast
 import json
 from pathlib import Path
 import sys
+import tomllib
 import unittest
 from unittest.mock import patch
 
@@ -24,7 +25,8 @@ from formatting import (  # noqa: E402
 )
 from data_access import DatabricksDataSource  # noqa: E402
 from charts import (  # noqa: E402
-    comparable_years, cost_bridge, savings_cost_chart, service_cost_chart, charge_cost_chart,
+    comparable_years, cost_bridge, lineage_chart, savings_cost_chart,
+    service_cost_chart, charge_cost_chart,
 )
 
 
@@ -75,6 +77,43 @@ class DashboardPresentationTests(unittest.TestCase):
         self.assertEqual(percent(-2.5, signed=True), "-2,50 %")
         self.assertEqual(money(None), "0,00 €")
         self.assertEqual(integer(float("nan")), "0")
+
+    def test_finops_inspired_theme_is_shipped_without_sandbox_navigation(self):
+        theme = tomllib.loads((APP / '.streamlit/config.toml').read_text())['theme']
+        self.assertEqual(theme['base'], 'light')
+        self.assertEqual(theme['chartCategoricalColors'][:2], ['#005A9E', '#00B894'])
+        self.assertEqual(theme['light']['backgroundColor'], '#FFFFFF')
+        self.assertEqual(theme['dark']['backgroundColor'], '#13232D')
+        for mode in ['light', 'dark']:
+            self.assertEqual(theme[mode]['textColor'], theme[mode]['sidebar']['textColor'])
+        source = (APP / 'app.py').read_text()
+        self.assertNotIn('Dashboard Style', source)
+        self.assertNotIn('127.0.0.1', source)
+        self.assertNotIn('FINOPS_PREVIEW_STYLE', source)
+        self.assertNotIn('recolor_chart', source)
+
+    def test_lineage_keeps_original_public_palette_and_structure(self):
+        figure = lineage_chart()
+        graph = figure.data[0]
+        self.assertEqual(graph.type, 'sankey')
+        self.assertEqual(graph.arrangement, 'fixed')
+        self.assertEqual(graph.textfont.shadow, 'none')
+        self.assertEqual(graph.node.y[-1], .375)
+        self.assertEqual(list(graph.node.label), [
+            'GCS Parquet', 'RAW Volume', 'Bronze', 'FOCUS Contract', 'Silver',
+            'Gold', 'Datamarts', 'Streamlit', 'OPS Audit',
+        ])
+        self.assertEqual(list(graph.node.color), [
+            '#0078d4', '#2b88d8', '#2b88d8', '#71afe5', '#71afe5',
+            '#00a4ef', '#50e6ff', '#deecf9', '#8764b8',
+        ])
+        self.assertEqual(list(zip(graph.link.source, graph.link.target)), [
+            (0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7),
+            (2, 8), (4, 8), (5, 8),
+        ])
+        self.assertEqual(figure.layout.height, 590)
+        self.assertEqual(figure.layout.paper_bgcolor, '#ffffff')
+        self.assertEqual(figure.layout.font.color, '#424242')
 
     def test_table_formatting_preserves_data_and_identifiers(self):
         frame = pd.DataFrame({
@@ -228,7 +267,7 @@ class DashboardPresentationTests(unittest.TestCase):
         self.assertEqual([trace.name for trace in figure.data],
                          ["Effective Cost", "Realized Savings"])
         self.assertEqual(figure.data[0].marker.color, "#005a9e")
-        self.assertEqual(figure.data[1].marker.color, "#8fd5a6")
+        self.assertEqual(figure.data[1].marker.color, "#00b894")
         self.assertEqual(figure.layout.title.text, "Realized Savings")
         self.assertIn("1\u202f100,00 €", figure.data[0].customdata[0])
         self.assertEqual(list(figure.data[1].customdata[0]), ["200,00 €", "1\u202f300,00 €"])
@@ -378,6 +417,12 @@ class DashboardPresentationTests(unittest.TestCase):
                                              "Realized Savings by Month")
                             self.assertIn("Realized Savings: %{customdata[0]}",
                                           trend["data"][0]["hovertemplate"])
+                        if title == "Architecture":
+                            chart = app.get('plotly_chart')[0]
+                            self.assertEqual(chart.proto.theme, '')
+                            spec = json.loads(chart.proto.spec)
+                            self.assertEqual(spec['layout']['paper_bgcolor'], '#ffffff')
+                            self.assertEqual(spec['data'][0]['node']['color'][0], '#0078d4')
 
     def test_savings_page_stays_usable_before_datamart_refresh(self):
         fixture = pd.DataFrame([{

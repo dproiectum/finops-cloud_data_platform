@@ -23,6 +23,32 @@ tables and the environment-aware `finops_ops.audit` history.
 
 The application never writes to Unity Catalog.
 
+## FinOps Inspired presentation
+
+The selected theme is shipped in `.streamlit/config.toml`, read from the app's
+working directory (also `/app` in the Docker image). Streamlit 1.63 or newer is
+required for the tested configuration. Native System / Light / Dark selection
+and responsive navigation remain available. The project does not use Foundation
+logos, photographs or website assets.
+
+Cost charts use Classic dark blue (`#005A9E`) and savings use turquoise-green
+(`#00B894`). Financial charts follow the active native light/dark theme. The
+Architecture lineage preserves the original public Sankey's blue gradient,
+white diagram surface, labels and links; explicit node positions stabilize its
+cascading layout and it opts out of chart theme overrides. Link widths are
+illustrative, not measured data volumes or costs.
+Medallion cards are arranged in two rows of three to keep descriptions readable.
+
+In portfolio mode, `Synthetic data · demo profiles` appears by the profile
+selector. The collapsed **About This Demo** panel explains that the selected
+profile is not authentication and cannot reveal real operational billing.
+There is no repeating page-wide demonstration banner. No access predicate,
+entitlement, query cache rule or DBU-publication gate is changed.
+
+Only the selected theme is deployed. Local comparison servers, fixtures, URLs
+and Classic/Modern style buttons are not part of this application. Rebuild and
+redeploy Cloud Run to apply the change; no SQL setup or pipeline rerun is needed.
+
 ## Consumption rollout (no ingestion reload)
 
 First run the manual SQL files `00` through `05` in

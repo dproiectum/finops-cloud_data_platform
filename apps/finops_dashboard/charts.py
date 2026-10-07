@@ -6,7 +6,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
-from formatting import chart_layout, money
+from formatting import COST_BLUE, SAVINGS_GREEN, chart_layout, money
 
 
 def service_cost_chart(frame: pd.DataFrame, title: str, order: str = "Highest cost first"):
@@ -23,7 +23,7 @@ def service_cost_chart(frame: pd.DataFrame, title: str, order: str = "Highest co
     figure = px.bar(
         totals, x="total_billed_cost", y="service_name", orientation="h",
         title=title, labels={"total_billed_cost": "Billed Cost (€)", "service_name": "Service"},
-        color_discrete_sequence=["#0078d4"],
+        color_discrete_sequence=[COST_BLUE],
     )
     figure.update_yaxes(
         categoryorder="array", categoryarray=totals["service_name"].tolist(),
@@ -46,7 +46,7 @@ def charge_cost_chart(frame: pd.DataFrame):
         totals, x="total_billed_cost", y="charge_category", orientation="h",
         title="Billed Cost by Charge Category",
         labels={"total_billed_cost": "Billed Cost (€)", "charge_category": "Charge Category"},
-        color_discrete_sequence=["#0078d4"],
+        color_discrete_sequence=[COST_BLUE],
     )
     figure.update_yaxes(
         categoryorder="array", categoryarray=totals["charge_category"].tolist(),
@@ -74,9 +74,9 @@ def cost_bridge(savings: pd.Series):
         textposition="outside", cliponaxis=False,
         customdata=[money(value) for value in (list_cost, contracted, effective, effective)],
         hovertemplate="%{x}<br>Step: %{text}<br>Cost After Step: %{customdata}<extra></extra>",
-        decreasing={"marker": {"color": "#107c10"}},
+        decreasing={"marker": {"color": SAVINGS_GREEN}},
         increasing={"marker": {"color": "#d97706"}},
-        totals={"marker": {"color": "#0078d4"}},
+        totals={"marker": {"color": COST_BLUE}},
         connector={"line": {"color": "#a19f9d"}},
     ))
     figure.update_layout(title="From List Price to Effective Cost", yaxis_title="Cost (€)")
@@ -99,8 +99,8 @@ def savings_cost_chart(frame: pd.DataFrame):
     )
     figure = go.Figure()
     for column, name, color in (
-        ("effective_cost", "Effective Cost", "#005a9e"),
-        ("price_benefit", "Realized Savings", "#8fd5a6"),
+        ("effective_cost", "Effective Cost", COST_BLUE),
+        ("price_benefit", "Realized Savings", SAVINGS_GREEN),
     ):
         figure.add_trace(go.Bar(
             x=costs["billing_month"], y=costs[column], name=name, marker_color=color,
@@ -122,6 +122,38 @@ def savings_cost_chart(frame: pd.DataFrame):
     figure.update_xaxes(title="Month", type="category")
     figure.update_yaxes(title="Cost (€)")
     return chart_layout(figure, 440), stacked
+
+
+def lineage_chart() -> go.Figure:
+    """Public lineage structure and palette with a stable, readable layout."""
+    labels = ["GCS Parquet", "RAW Volume", "Bronze", "FOCUS Contract", "Silver",
+              "Gold", "Datamarts", "Streamlit", "OPS Audit"]
+    links = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7),
+             (2, 8), (4, 8), (5, 8)]
+    figure = go.Figure(go.Sankey(
+        arrangement="fixed",
+        textfont=dict(color="#424242", size=14, shadow="none"),
+        node=dict(
+            label=labels,
+            # Keep the audit branch above the main chain. Automatic Sankey
+            # placement varies across Plotly/front-end versions and viewport sizes.
+            x=[.01, .14, .28, .42, .56, .70, .84, .99, .99],
+            y=[.125, .125, .25, .375, .50, .75, .875, .875, .375],
+            color=["#0078d4", "#2b88d8", "#2b88d8", "#71afe5", "#71afe5",
+                   "#00a4ef", "#50e6ff", "#deecf9", "#8764b8"],
+            pad=24, thickness=24, line=dict(color="#005a9e", width=1),
+        ),
+        link=dict(source=[source for source, _ in links],
+                  target=[target for _, target in links],
+                  value=[1] * len(links), color="rgba(0,120,212,.20)"),
+    ))
+    figure.update_layout(
+        template="none", height=590, margin=dict(l=12, r=12, t=48, b=12),
+        paper_bgcolor="#ffffff", plot_bgcolor="#ffffff",
+        font=dict(color="#424242"), title_font=dict(color="#242424", size=17),
+        legend_title_text="", separators=",\u202f",
+    )
+    return figure
 
 
 def year_history(frame: pd.DataFrame, year: str) -> pd.DataFrame:

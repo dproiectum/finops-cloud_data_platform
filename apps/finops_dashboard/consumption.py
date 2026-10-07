@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import plotly.graph_objects as go
 
-from formatting import chart_layout, measurement_number
+from formatting import COST_BLUE, chart_layout, measurement_number
 
 
 def azure_history_body(period_predicate: str) -> str:
@@ -63,7 +63,7 @@ def azure_consumption_chart(series: pd.DataFrame):
     figure = go.Figure(go.Bar(
         x=rows['billing_month'],
         y=pd.to_numeric(rows['consumed_quantity'], errors='coerce'),
-        marker_color='#0078d4',
+        marker_color=COST_BLUE,
         customdata=[
             [measurement_number(quantity), str(first)[:10], str(last)[:10], int(missing)]
             for quantity, first, last, missing in zip(

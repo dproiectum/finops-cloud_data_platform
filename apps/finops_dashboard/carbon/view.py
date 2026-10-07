@@ -6,7 +6,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from formatting import chart_layout, consumption_table, integer, measurement_number, percent
+from formatting import COST_BLUE, chart_layout, consumption_table, integer, measurement_number, percent
 from .scenario import MODELLED, Scenario, estimate_scenario, load_grid_references, monthly_scenarios
 
 
@@ -15,7 +15,7 @@ def monthly_chart(monthly: pd.DataFrame, location: str) -> go.Figure:
     plotted = monthly.dropna(subset=['scenario_kgco2e'])
     figure = go.Figure(go.Bar(
         x=plotted['billing_month'], y=plotted['scenario_kgco2e'],
-        name='Illustrative Emissions', marker_color='#276898',
+        name='Illustrative Emissions', marker_color=COST_BLUE,
         marker_pattern_shape=[
             '/' if status.startswith('Partial') else '' for status in plotted['period_status']
         ],
@@ -43,7 +43,7 @@ def comparison_chart(row: pd.Series, primary: dict, comparison: dict) -> go.Figu
     references = [primary, comparison]
     figure = go.Figure(go.Bar(
         x=[reference['location'] for reference in references], y=values,
-        marker_color=['#276898', '#79baad'],
+        marker_color=[COST_BLUE, '#50b5ad'],
         customdata=[
             [measurement_number(value), measurement_number(row['scenario_energy_kwh']),
              measurement_number(reference['grid_gco2e_per_kwh'])]

@@ -5,6 +5,10 @@ from __future__ import annotations
 import pandas as pd
 
 
+COST_BLUE = "#005a9e"
+SAVINGS_GREEN = "#00b894"
+
+
 SAVINGS_COMPONENTS = (
     "reservation", "savings_plan", "usage_on_demand", "usage_dynamic", "adjustment",
 )
@@ -166,12 +170,10 @@ def chart_layout(figure, height: int = 360):
     figure.update_layout(
         height=height,
         margin=dict(l=12, r=12, t=48, b=12),
-        paper_bgcolor="#ffffff",
-        plot_bgcolor="#ffffff",
-        font=dict(color="#424242"),
-        title_font=dict(color="#242424", size=17),
-        xaxis=dict(gridcolor="#edebe9", linecolor="#d2d0ce"),
-        yaxis=dict(gridcolor="#edebe9", linecolor="#d2d0ce"),
+        # The frontend supplies the current native light/dark text and grid.
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        title_font=dict(size=17),
         legend_title_text="",
         separators=",\u202f",
     )

@@ -1,0 +1,53 @@
+# FinOps Inspired: independent project theme, with native light/dark navigation.
+# No Foundation logos, photographs, fonts or website CSS are used.
+[theme]
+base = "light"
+primaryColor = "#00856F"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F0F7F6"
+textColor = "#172933"
+borderColor = "#D6E3E1"
+showWidgetBorder = true
+showSidebarBorder = true
+baseFontSize = 14
+baseFontWeight = 400
+font = "sans-serif"
+headingFontWeights = [600, 600, 600, 600, 600, 600]
+headingFontSizes = ["2.3rem", "1.6rem", "1.2rem"]
+metricValueFontSize = "1.7rem"
+metricValueFontWeight = 600
+baseRadius = "0.65rem"
+dataframeHeaderBackgroundColor = "#EAF3F1"
+chartCategoricalColors = ["#005A9E", "#00B894", "#50B5AD", "#D5AA59", "#708793"]
+
+[theme.sidebar]
+backgroundColor = "#F0F7F6"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#172933"
+
+[theme.light]
+primaryColor = "#00856F"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F0F7F6"
+textColor = "#172933"
+borderColor = "#D6E3E1"
+dataframeHeaderBackgroundColor = "#EAF3F1"
+
+[theme.light.sidebar]
+backgroundColor = "#F0F7F6"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#172933"
+
+[theme.dark]
+primaryColor = "#00C8A1"
+backgroundColor = "#13232D"
+secondaryBackgroundColor = "#0D1B23"
+textColor = "#E8F4F1"
+borderColor = "#35505A"
+dataframeHeaderBackgroundColor = "#0D1B23"
+blueColor = "#71BCD7"
+
+[theme.dark.sidebar]
+backgroundColor = "#0D1B23"
+secondaryBackgroundColor = "#13232D"
+textColor = "#E8F4F1"
