@@ -79,7 +79,7 @@ def azure_consumption_chart(series: pd.DataFrame):
     ))
     figure.update_layout(title='Monthly Consumption — Loaded Data Only', showlegend=False)
     figure.update_xaxes(title='Billing Month', type='category')
-    figure.update_yaxes(title=f'Consumed Quantity ({unit})', tickformat=',.6~f', zeroline=True)
+    figure.update_yaxes(title=f'Consumed Quantity ({unit})', tickformat=',.2f', zeroline=True)
     return chart_layout(figure, 420)
 
 

@@ -15,7 +15,7 @@ tables and the environment-aware `finops_ops.audit` history.
   application owners;
 - **Resources**: resources, regions and resource groups;
 - **Consumption**: monthly synthetic Azure Usage by service, SKU and consumed unit;
-  measurement completeness, signed corrections, and explicit carbon unavailability.
+  measurement completeness, signed corrections, and a labelled illustrative carbon scenario.
   Real Databricks DBUs remain disabled in public/demo/portfolio modes;
 - **Operations & Quality**: critical completeness, pipeline runs, reconciliation
   and DEV/PROD audit separation;
@@ -44,8 +44,9 @@ loaded Usage dates of July 1–2, not a complete July bill. Missing quantities s
 unavailable, real zeroes stay zero, and negative quantities remain signed.
 Measurement coverage reports availability of quantity/unit pairs, not full-month
 completeness. Quantities and counts use European display formatting; the stored
-precision is unchanged. Tiny non-zero quantities use scientific notation instead
-of rounding visibly to zero.
+precision is unchanged. Measures display exactly two decimal places; counts remain
+integers and missing measurements display `—`. Small non-zero values may round
+visibly to `0,00`, but are not replaced by zero in data or calculations.
 
 The Databricks tab makes **no operational billing query** in `public`, `demo` or
 `portfolio_demo`, even for a selectable administrator and even if the activation
@@ -67,8 +68,45 @@ cost comparison, energy measurement or carbon estimate.
 After manual source rollout/deployment, open **Consumption**. Missing view or
 permission errors stop the page with no fallback dataset. The public query cache
 can last five minutes; protected pages query permissions afresh. No pipeline
-rerun or new warehouse is needed. Carbon remains explicitly **Unavailable** until
-an appropriate verified emissions dataset and method are introduced separately.
+rerun or new warehouse is needed. Measured carbon reporting remains unavailable;
+the separate what-if scenario described below does not replace a provider report.
+
+### Illustrative Carbon (read-only teaching scenario)
+
+The third Consumption tab reuses the **already authorized** synthetic Usage history;
+it adds no query, table, SQL rollout, pipeline or dependency. It models only
+`Virtual Machines` and `Virtual Machine Scale Sets` with the exact unit `Hours`.
+One eligible billing hour hypothetically equals one equivalent VM-hour, with
+the same assumed IT power for all included SKUs. It does not resolve physical
+VM sizes, utilization or the source Azure region.
+
+Editable defaults **50 W** and **PUE 1.2** are teaching assumptions, not provider
+measurements. Scenario energy = eligible hours × assumed watts / 1000 × PUE.
+Illustrative operational electricity emissions = scenario kWh × grid intensity
+in gCO2e/kWh / 1000. There is no DBU, cost, storage or unsupported-unit conversion.
+
+`carbon/grid_references.json` pins Google's annual **2025 gross grid intensities**:
+Belgium 126, Frankfurt 276 and Paris 16 gCO2e/kWh. Source:
+https://cloud.google.com/sustainability/region-carbon . These are alternative
+hypothetical grid locations, not measured Azure or Databricks emissions. The
+same annual factors are applied to all loaded months, including 2026, without
+CFE discount, offsets, embodied emissions or lifecycle accounting. No runtime
+HTTP fetch or silent fallback factor is used. Update the pinned metadata and
+tests deliberately if changing the published reference year.
+
+An entire aggregated month/service/SKU/unit group is excluded when its SKU is
+unknown, counters are inconsistent, any quantity is missing or negative, or its
+service/unit is unsupported. Source corrections stay signed and unchanged on
+the Azure tab. An unmodelled month is unavailable, not zero; a measured zero
+remains zero. Coverage is **Usage-row coverage**, not coverage of energy/emissions.
+Missing months are not filled. Partial loaded date windows are marked; calendar
+date coverage alone does not certify completeness. Location comparison holds
+energy constant and must not be reported as observed migration savings.
+
+Deployment: after the ongoing PROD copy and validation have passed, push these
+application changes and rebuild/redeploy Cloud Run as usual. Do not rerun ingestion
+for this calculator or change access scopes. All private Databricks DBU gates remain
+unchanged. No application/region totals for real Databricks carbon are claimed.
 
 Amounts, percentages and counts use European display formatting (for example,
 `912 000,00 €`, `14,66 %` and `164 145`), including financial tables and monetary

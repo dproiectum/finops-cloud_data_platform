@@ -141,7 +141,7 @@ class DashboardPresentationTests(unittest.TestCase):
         figure = px.bar(x=["2025-01"], y=[912000], labels={"y": "Cost (€)"})
         chart_layout(figure)
         self.assertEqual(figure.layout.separators, ",\u202f")
-        self.assertEqual(figure.layout.yaxis.tickformat, ",.0f")
+        self.assertEqual(figure.layout.yaxis.tickformat, ",.2f")
         self.assertEqual(figure.layout.yaxis.hoverformat, ",.2f")
 
     def test_savings_table_has_ordered_business_labels_and_european_values(self):

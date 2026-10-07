@@ -1,0 +1,15 @@
+{
+  "reference_year": 2025,
+  "source_title": "Google Cloud: Carbon free energy for Google Cloud regions",
+  "source_url": "https://cloud.google.com/sustainability/region-carbon",
+  "upstream_repository": "https://github.com/GoogleCloudPlatform/region-carbon-info",
+  "snapshot_date": "2026-10-07",
+  "unit": "gCO2e/kWh",
+  "basis": "Annual operational gross grid carbon intensity; not Google CFE-adjusted emissions",
+  "application": "Alternative hypothetical grid locations, not source Azure regions or measured Databricks emissions",
+  "references": [
+    {"region": "europe-west1", "location": "Belgium", "grid_gco2e_per_kwh": 126},
+    {"region": "europe-west3", "location": "Frankfurt", "grid_gco2e_per_kwh": 276},
+    {"region": "europe-west9", "location": "Paris", "grid_gco2e_per_kwh": 16}
+  ]
+}

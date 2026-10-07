@@ -46,13 +46,10 @@ def percent(value: object, *, signed: bool = False) -> str:
 
 
 def measurement_number(value: object) -> str:
-    """European quantity display; missing is not zero, and tiny values stay visible."""
+    """Two-decimal European display only; missing is not zero, source values stay exact."""
     if value is None or pd.isna(value):
         return '—'
-    numeric = float(value)
-    rendered = (f'{numeric:.3e}' if 0 < abs(numeric) < 0.000001
-                else f'{numeric:,.6f}'.rstrip('0').rstrip('.'))
-    return rendered.translate(str.maketrans({',': '\u202f', '.': ','}))
+    return decimal_number(value)
 
 
 def consumption_table(frame: pd.DataFrame):
@@ -61,7 +58,8 @@ def consumption_table(frame: pd.DataFrame):
     display = frame.rename(columns=labels)
     formatters = {}
     for column in frame.columns:
-        if column in {'consumed_quantity', 'net_dbu'}:
+        if column in {'consumed_quantity', 'net_dbu', 'scenario_vm_hours',
+                      'scenario_energy_kwh', 'scenario_kgco2e', 'comparison_kgco2e'}:
             formatters[labels[column]] = measurement_number
         elif column.endswith('_rows') or column == 'billing_records':
             formatters[labels[column]] = integer
@@ -85,6 +83,10 @@ def column_label(column: object) -> str:
         "net_dbu": "Net DBUs",
         "is_genie_free_usage": "Genie Free Usage",
         "missing_measurement_rows": "Missing Measurements",
+        "scenario_vm_hours": "Modelled VM Billing Hours",
+        "scenario_energy_kwh": "Scenario Energy (kWh)",
+        "scenario_kgco2e": "Illustrative Emissions (kgCO₂e)",
+        "comparison_kgco2e": "Comparison Scenario (kgCO₂e)",
     }
     name = str(column)
     if name in aliases:
@@ -176,5 +178,5 @@ def chart_layout(figure, height: int = 360):
     for axis_name in ("xaxis", "yaxis"):
         axis = getattr(figure.layout, axis_name)
         if axis.title.text and "€" in axis.title.text:
-            axis.update(tickformat=",.0f", hoverformat=",.2f")
+            axis.update(tickformat=",.2f", hoverformat=",.2f")
     return figure

@@ -141,10 +141,12 @@ class DashboardConsumptionTests(unittest.TestCase):
         self.assertNotIn('consumed_quantity', summary)
         self.assertEqual(summary['last_date'], pd.Timestamp('2026-01-02'))
 
-    def test_quantity_formatting_distinguishes_null_zero_and_tiny_signed_values(self):
-        for value, display in [(None, '—'), (float('nan'), '—'), (0, '0'),
-                               (Decimal('-1234.5'), '-1\u202f234,5'),
-                               (Decimal('0.000000001'), '1,000e-09')]:
+    def test_quantity_formatting_uses_two_decimals_without_changing_source_values(self):
+        for value, display in [(None, '—'), (float('nan'), '—'), (0, '0,00'),
+                               (Decimal('-1234.5'), '-1\u202f234,50'),
+                               (Decimal('0.000000001'), '0,00'),
+                               (Decimal('-0.000000001'), '-0,00'),
+                               (Decimal('1234.56789'), '1\u202f234,57')]:
             self.assertEqual(measurement_number(value), display)
         frame = self.owner_history()
         original = frame.copy(deep=True)
@@ -164,7 +166,8 @@ class DashboardConsumptionTests(unittest.TestCase):
         self.assertEqual(list(figure.data[0].y), [80, -2])
         self.assertEqual(figure.layout.separators, ',\u202f')
         self.assertEqual(figure.layout.xaxis.type, 'category')
-        self.assertEqual(figure.data[0].customdata[1][0], '-2')
+        self.assertEqual(figure.data[0].customdata[1][0], '-2,00')
+        self.assertEqual(figure.layout.yaxis.tickformat, ',.2f')
         missing = azure_consumption_chart(consumption_series(frame, 'Storage', 'SKU2', 'GB'))
         self.assertTrue(pd.isna(missing.data[0].y[0]))
         self.assertEqual(missing.data[0].customdata[0][0], '—')
@@ -215,18 +218,19 @@ class DashboardConsumptionTests(unittest.TestCase):
             app = AppTest.from_file(str(APP / 'app.py'), default_timeout=30).run()
             self.assertFalse(app.exception)
             self.assertEqual([tab.label for tab in app.tabs],
-                             ['Azure Consumption', 'Databricks DBUs', 'Carbon Availability'])
-            self.assertEqual(app.metric[-1].value, '-2')
+                             ['Azure Consumption', 'Databricks DBUs', 'Illustrative Carbon'])
+            self.assertEqual(next(item.value for item in app.metric if item.label == 'Consumed Quantity'), '-2,00')
             self.assertEqual(len(app.get('plotly_chart')), 1)
             chart = json.loads(app.get('plotly_chart')[0].proto.spec)
             self.assertEqual(chart['layout']['yaxis']['title']['text'], 'Consumed Quantity (Hours)')
             self.assertTrue(any('not published' in item.value for item in app.info))
-            self.assertTrue(any('Carbon Emissions: Unavailable' in item.value for item in app.info))
+            self.assertTrue(any('Not Estimated' in item.value for item in app.info))
+            self.assertTrue(any('not measured' in item.value for item in app.warning))
             self.assertFalse(any('monitoring' in sql or 'system.billing' in sql
                                  for sql, _ in self.source.calls))
             app.selectbox(key='consumption_unit').set_value('GB').run()
             self.assertFalse(app.exception)
-            self.assertEqual(app.metric[-1].value, '—')
+            self.assertEqual(next(item.value for item in app.metric if item.label == 'Consumed Quantity'), '—')
             self.assertTrue(any('no loaded row' in item.value for item in app.info))
 
     def test_portfolio_owner_page_renders_only_authorized_consumption(self):
@@ -266,7 +270,9 @@ class DashboardConsumptionTests(unittest.TestCase):
         ):
             app = AppTest.from_file(str(APP / 'app.py'), default_timeout=30).run()
             self.assertFalse(app.exception)
-            self.assertEqual([metric.value for metric in app.metric][-2:], ['6', '2'])
+            self.assertEqual([metric.value for metric in app.metric if metric.label in {
+                'Net DBUs Excluding Genie Free Usage', 'Genie Free Usage DBUs',
+            }], ['6,00', '2,00'])
             self.assertEqual(app.selectbox(key='dbu_usage_month').value, '2026-09')
             self.assertEqual(app.selectbox(key='billing_month').value, '2026-02')
             self.assertEqual(len(app.get('plotly_chart')), 2)

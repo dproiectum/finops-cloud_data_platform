@@ -9,6 +9,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from config import DashboardConfig
+from carbon.view import render_carbon_scenario
 from charts import (
     charge_cost_chart, comparable_years, savings_cost_chart, service_cost_chart, year_history,
 )
@@ -545,7 +546,7 @@ def allocation_page(month: str) -> None:
                 customdata=[[money(value)] for value in figure.data[0].values],
                 hovertemplate="%{label}<br>Billed Cost: %{customdata[0]}<extra></extra>",
             )
-            figure.update_coloraxes(colorbar_tickformat=",.0f")
+            figure.update_coloraxes(colorbar_tickformat=",.2f")
         st.plotly_chart(chart_layout(figure, 520), width="stretch")
         st.dataframe(financial_table(centers), hide_index=True, width="stretch")
     with subscription_tab:
@@ -605,10 +606,10 @@ def resources_page(month: str) -> None:
 def consumption_page(month: str) -> None:
     page_title(
         'FINOPS · CONSUMPTION', 'Consumption & Sustainability',
-        'Existing consumption records only — no estimated carbon emissions',
+        'Synthetic consumption and an illustrative electricity-emissions scenario',
     )
     azure_tab, dbu_tab, carbon_tab = st.tabs(
-        ['Azure Consumption', 'Databricks DBUs', 'Carbon Availability']
+        ['Azure Consumption', 'Databricks DBUs', 'Illustrative Carbon']
     )
     with azure_tab:
         st.caption('Synthetic Azure data · Usage charges only · authorized application scope')
@@ -640,6 +641,8 @@ def consumption_page(month: str) -> None:
                 'can describe different meters: choose one service, SKU and unit. '
                 'Signed quantities, including negative corrections, are retained.'
             )
+            st.caption('Measurements display two decimal places only. Small non-zero values may '
+                       'round to 0,00; source values and calculations retain their full precision.')
             chart_source = history.dropna(subset=['service_name', 'sku_id', 'consumed_unit'])
             if chart_source.empty:
                 st.info('No known service/SKU/unit combination is available for a chart.')
@@ -693,14 +696,7 @@ def consumption_page(month: str) -> None:
             databricks_consumption_page()
 
     with carbon_tab:
-        st.info('Carbon Emissions: Unavailable — no verified emissions dataset is connected.')
-        st.write(
-            'Azure consumption here is synthetic. Databricks DBUs describe platform usage, '
-            'not electricity or carbon emissions. Neither source supplies a validated energy '
-            'or emissions factor for these services. No kWh or kgCO₂e is inferred from cost, '
-            'Hours, GB or DBUs.'
-        )
-        st.caption('This page adds no source modification, ingestion run or carbon-estimation pipeline.')
+        render_carbon_scenario(history, month)
 
 
 def databricks_consumption_page() -> None:
@@ -747,7 +743,7 @@ def databricks_consumption_page() -> None:
         ))
         figure.update_layout(title='Net DBUs by Available Month — Excluding Genie Free Usage')
         figure.update_xaxes(title='Usage Month', type='category')
-        figure.update_yaxes(title='Net DBUs', tickformat=',.6~f', zeroline=True)
+        figure.update_yaxes(title='Net DBUs', tickformat=',.2f', zeroline=True)
         st.plotly_chart(chart_layout(figure, 420), width='stretch')
     st.subheader('Detailed DBU Table')
     st.dataframe(consumption_table(monthly), hide_index=True, width='stretch')
