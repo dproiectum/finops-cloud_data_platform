@@ -211,6 +211,10 @@ class CollectionTests(unittest.TestCase):
         export = (sql / '01_export_gcp_to_gcs.sql').read_text()
         self.assertLess(export.index('data-*.parquet'), export.index('complete-*.json'))
         self.assertIn('GENERATE_UUID()', export)
+        self.assertIn("EXPORT DATA OPTIONS(uri='%sdata-*.parquet', format='PARQUET', overwrite=true)", export)
+        self.assertIn("EXPORT DATA OPTIONS(uri='%scomplete-*.json', format='JSON', overwrite=true)", export)
+        self.assertNotIn('overwrite=false', export)
+        self.assertIn("CONCAT('gs://dtl_finops/platform_costs/extracts/gcp/', run_id, '/')", export)
         for path in [ROOT / 'platform/classic_compute/jobs/platform_costs_daily.yml',
                      ROOT / 'platform/serverless/jobs/platform_costs_daily.yml']:
             content = path.read_text()

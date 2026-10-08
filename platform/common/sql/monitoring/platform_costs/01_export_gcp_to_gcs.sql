@@ -1,6 +1,9 @@
 -- BIGQUERY ONLY. Run manually first, then schedule daily in location EU.
 -- No local download and no service-account key in Databricks.
--- Unique immutable export directory; COMPLETE is written only after data export.
+-- Unique export directory per full script execution; COMPLETE follows data export.
+-- overwrite=true is required for a non-empty destination bucket. Only objects
+-- with the exact generated export URIs can be replaced; no objects are deleted.
+-- Always rerun the whole script to generate a new run_id, not an export alone.
 -- Review estimated scan bytes and the destination bucket's location/permissions.
 DECLARE extracted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP();
 DECLARE run_id STRING DEFAULT CONCAT(FORMAT_TIMESTAMP('%Y%m%dT%H%M%SZ', extracted_at, 'UTC'), '_', REPLACE(GENERATE_UUID(), '-', ''));
@@ -28,13 +31,13 @@ ASSERT (SELECT COUNT(*) BETWEEN 1 AND 10000 FROM monthly_cost) AS 'Missing or ov
 ASSERT (SELECT COUNTIF(cost_before_credits IS NULL OR credits IS NULL OR service IS NULL OR currency IS NULL) = 0 FROM monthly_cost) AS 'Invalid GCP aggregate';
 
 EXECUTE IMMEDIATE FORMAT("""
-  EXPORT DATA OPTIONS(uri='%sdata-*.parquet', format='PARQUET', overwrite=false)
+  EXPORT DATA OPTIONS(uri='%sdata-*.parquet', format='PARQUET', overwrite=true)
   AS SELECT * FROM monthly_cost
 """, base_uri);
 
 -- This is extraction freshness, not proof of complete billing history.
 EXECUTE IMMEDIATE FORMAT("""
-  EXPORT DATA OPTIONS(uri='%scomplete-*.json', format='JSON', overwrite=false)
+  EXPORT DATA OPTIONS(uri='%scomplete-*.json', format='JSON', overwrite=true)
   AS SELECT 1 AS schema_version, @run_id AS run_id,
     FORMAT_TIMESTAMP('%%Y-%%m-%%dT%%H:%%M:%%E6SZ', @extracted_at, 'UTC') AS extracted_at,
     (SELECT COUNT(*) FROM monthly_cost) AS row_count, 'COMPLETE' AS status

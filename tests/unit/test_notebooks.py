@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 import re
+import subprocess
+import sys
 import unittest
 
 
@@ -10,6 +12,33 @@ CLASSIC_NOTEBOOKS = ROOT / "platform/classic_compute/notebooks"
 
 
 class NotebookTests(unittest.TestCase):
+    def test_cost_collector_bootstrap_recovers_cached_missing_source_directory(self):
+        notebook = COMMON_NOTEBOOKS / 'monitoring/collect_platform_costs.ipynb'
+        script = '''
+import importlib.util
+import json
+from pathlib import Path
+import sys
+
+notebook = Path(sys.argv[1])
+expected_source = str(notebook.resolve().parents[4] / 'src')
+sys.path.insert(0, expected_source)
+sys.path_importer_cache[expected_source] = None
+assert importlib.util.find_spec('finops_cloud') is None
+cells = json.loads(notebook.read_text())['cells']
+bootstrap = next(cell for cell in cells if cell['cell_type'] == 'code')
+exec(''.join(bootstrap['source']))
+assert importlib.util.find_spec('finops_cloud') is not None
+import finops_cloud
+assert Path(finops_cloud.__file__).resolve() == (Path(expected_source) / 'finops_cloud/__init__.py').resolve()
+'''
+        result = subprocess.run(
+            [sys.executable, '-c', script, str(notebook)],
+            cwd=notebook.parent, capture_output=True, text=True, timeout=30,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('Cloud repository paths resolved.', result.stdout)
+
     def test_notebooks_are_clean_valid_and_platform_scoped(self):
         notebooks = sorted((ROOT / "platform").rglob("*.ipynb"))
         self.assertEqual(len(notebooks), 14)

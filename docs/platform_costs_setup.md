@@ -105,6 +105,13 @@ créer dans **IAM & Admin → Service Accounts** un compte dédié, sans clé JS
 
 `finops-platform-cost-export@global-repeater-355412.iam.gserviceaccount.com`
 
+Un nouveau compte n'est pas techniquement obligatoire si un compte d'export
+existant a déjà cette fonction et peut recevoir les droits limités ci-dessous.
+Dans notre configuration, les trois comptes existants servent Compute Engine,
+les VM Databricks et le runtime du dashboard public. Garder leurs responsabilités
+séparées et utiliser le compte d'export dédié choisi ; ne supprimer aucun des
+comptes existants. Ne pas donner au runtime public l'accès à la facturation brute.
+
 Accorder :
 
 | Ressource | Droit |
@@ -146,6 +153,13 @@ de clé à Databricks ou au dashboard.
 
 Un répertoire sans marqueur COMPLETE n'est jamais consommé. Chaque export a son
 propre répertoire : les shards d'un ancien export ne se mélangent pas au nouveau.
+Les deux `EXPORT DATA` utilisent `overwrite=true`, car BigQuery peut refuser
+`overwrite=false` lorsque le bucket contient déjà des objets. Cette option ne
+supprime aucun objet et ne remplace que les fichiers ayant les mêmes URI de
+destination. L'horodatage et l'UUID créent un nouveau préfixe à chaque exécution
+complète : relancer toujours le script entier, jamais un export isolé avec un
+ancien `run_id`. Après un échec, conserver les répertoires incomplets pour le
+diagnostic ; ne pas vider le bucket pour contourner cette erreur.
 Les montants sont transportés sous forme de décimaux textuels dans le Parquet,
 sans formatage européen ni conversion flottante. Les tables Delta utilisent
 DECIMAL(38,18) ; une valeur collectée non représentable est refusée. Le coût
@@ -191,6 +205,10 @@ complet. Les dossiers `src` et `apps` doivent être présents ; ne pas copier
 uniquement ce notebook dans un autre dossier. Aucune installation `%pip` n'est
 nécessaire dans ce Runtime. Redémarrer la session Python après une mise à jour
 des modules si le notebook était déjà ouvert et exécuté.
+La première cellule rafraîchit aussi les caches d'import des dossiers `src` et
+de l'application, puis vérifie que `finops_cloud` est détecté avant la collecte.
+Après un Pull, relancer toutes les cellules dans l'ordre ; ne pas exécuter
+uniquement la dernière cellule dans une nouvelle session.
 
 Premier lancement :
 
