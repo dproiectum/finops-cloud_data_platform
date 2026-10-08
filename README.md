@@ -84,10 +84,12 @@ Visit **[https://finops.allops.cloud](https://finops.allops.cloud)**.
 | Allocation & Accountability | Cost allocation by service, cost center, subscription, and application owner. |
 | Cost Drivers | Service, charge-category, and SKU analysis. |
 | Resources | Resource-level and resource-group analysis. |
-| Consumption | Synthetic Azure usage quantities and coverage; restricted Databricks DBU telemetry. |
+| Consumption & Emission | Synthetic Azure usage and explicitly illustrative carbon scenarios. |
 | Knowledge Base | Cost formulas, FOCUS column definitions, and terminology. |
 | Operations & Quality | Data coverage and, where authorized, pipeline audit and reconciliation. |
 | Architecture | Processing layers and data lineage. |
+| About the Project | Project presentation, stack and approved Platform Costs aggregates. |
+| About Me | Engineering profile and contact. |
 
 The dashboard uses European number formatting and responsive navigation.
 Its **Realized Savings** indicator is `List Cost - Effective Cost`, a pricing
@@ -96,9 +98,12 @@ comparison rather than evidence of cash savings achieved by an optimization.
 The Consumption code and [manual rollout](apps/finops_dashboard/README.md#consumption-rollout-no-ingestion-reload)
 are available; validate the serving views and deployment before treating this
 feature as operational. Azure quantities are grouped by compatible SKU and unit,
-not summed across different units. Real Databricks DBUs are restricted to the
-authenticated private administrator path and are not exposed through public
-portfolio profiles. Carbon emissions are not measured by this project.
+not summed across different units. The Consumption page does not query real
+Databricks billing. Carbon emissions are not measured by this project.
+Approved GCP cost/Databricks list-cost aggregates belong to **About the Project →
+Platform Costs**; the [manual installation guide](docs/platform_costs_setup.md)
+prepares a separate scheduled monitoring workflow and private GCS serving object.
+These scripts do not deploy resources or enable schedules automatically.
 
 ## Data quality and access control
 

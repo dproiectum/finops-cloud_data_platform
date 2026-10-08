@@ -1,0 +1,23 @@
+# Manual UI template, not included in databricks.yml or deployed automatically.
+resources:
+  jobs:
+    finops_platform_costs_daily:
+      name: finops-platform-costs-daily
+      max_concurrent_runs: 1
+      timeout_seconds: 1800
+      tasks:
+        - task_key: collect_validate_publish
+          notebook_task:
+            notebook_path: /Workspace/Users/thailongdam@gmail.com/finops-cloud_data_platform/platform/common/notebooks/monitoring/collect_platform_costs
+            source: WORKSPACE
+      parameters:
+        - name: dry_run
+          default: "false"
+        - name: confirmation
+          default: PUBLISH_PLATFORM_COSTS
+      schedule:
+        quartz_cron_expression: "0 43 8 * * ?"
+        timezone_id: Europe/Paris
+        pause_status: PAUSED
+      queue:
+        enabled: true

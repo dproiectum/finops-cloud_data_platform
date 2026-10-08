@@ -388,7 +388,7 @@ class DashboardPresentationTests(unittest.TestCase):
                 with self.subTest(page=title):
                     def choose_page(pages, *, position):
                         self.assertEqual(position, "top")
-                        self.assertNotIn("Project Costs", [page.title for page in pages])
+                        self.assertNotIn("Platform Costs", [page.title for page in pages])
                         return next(page for page in pages if page.title == title)
 
                     with patch.object(st, "Page", CallablePage), patch.object(

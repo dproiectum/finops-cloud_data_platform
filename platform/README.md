@@ -8,3 +8,8 @@ The repository is organized first by execution scenario:
 
 Choose exactly one scenario for catalog creation. Both scenarios reuse the same
 pipeline notebooks, blocking controls, Gold model, and datamarts from `common`.
+
+Platform Costs adds a separate monitoring workflow. Its manual Job templates in
+each compute scenario reference one common notebook and start with a paused
+schedule. They are not included in the business bundle. See
+[the installation guide](../docs/platform_costs_setup.md).

@@ -10,6 +10,9 @@ and Classic Compute:
 - `sql/gold`: Gold table/view creation, month loading, and the manual allocation policy;
 - `sql/datamarts`: certified analytical table refreshes.
 - `sql/monitoring`: Job-run duration, DBU, and list-cost analysis.
+- `notebooks/monitoring`: independent Platform Costs collection and publication;
+- `sql/monitoring/platform_costs`: BigQuery export, Databricks collection,
+  additive monitoring setup and controls, with explicit execution engines.
 
 Do not copy these files into a scenario folder. Scenario Jobs must reference
 the common paths directly.

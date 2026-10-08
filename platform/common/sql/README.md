@@ -5,6 +5,9 @@
 - `gold/data_loading/`: month-scoped dimension, tag, and fact loading;
 - `datamarts/table_refresh/`: fourteen certified analytical tables.
 - `monitoring/`: reusable DBU, list-cost, and Job-run observability queries.
+  `monitoring/platform_costs/` is the independent real platform-cost workflow;
+  its BigQuery scripts must not be executed in Databricks. Follow
+  [the installation guide](../../../docs/platform_costs_setup.md).
 - `consumption/`: manual source checks, additive ordinary consumption views and
   read-only reconciliation controls; no ingestion, source rewrite or carbon estimate.
 - `security/`: additive manual dashboard metadata setup and synthetic entitlement

@@ -1,9 +1,9 @@
-"""Validate the deliberately small, public monthly-cost snapshot."""
+"""Validate the deliberately small, public platform-cost snapshot."""
 
 from __future__ import annotations
 
 from datetime import date
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, localcontext
 import json
 from pathlib import Path
 import re
@@ -29,7 +29,7 @@ def decimal_value(value, *, optional=False):
     except InvalidOperation as exc:
         raise ValueError("Use unformatted decimal numbers, for example 1234.56.") from exc
     if not number.is_finite() or abs(number) > Decimal("1e15"):
-        raise ValueError("Invalid numeric value in project cost snapshot.")
+        raise ValueError("Invalid numeric value in platform cost snapshot.")
     return number
 
 
@@ -69,29 +69,22 @@ def validate_records(records):
             else:
                 if row["usage_unit"] not in {"", None} or parsed["usage_quantity"] is not None:
                     raise ValueError("Do not aggregate incompatible GCP consumption units.")
-                parsed["reported_cost"] = parsed["cost_before_credits"] + parsed["credits"]
+                with localcontext() as context:
+                    context.prec = 80
+                    parsed["reported_cost"] = parsed["cost_before_credits"] + parsed["credits"]
             key = tuple(row[column] for column in KEY)
             if key in seen:
                 raise ValueError("Duplicate monthly service aggregate; merge sources before publishing.")
             seen.add(key)
             checked.append(parsed)
         except (ValueError, TypeError, KeyError) as exc:
-            raise ValueError(f"Project cost row {position}: {exc}") from exc
+            raise ValueError(f"Platform cost row {position}: {exc}") from exc
     return pd.DataFrame(checked, columns=[*COLUMNS, "reported_cost"])
 
 
 def load_snapshot(path=SNAPSHOT_PATH):
-    payload = json.loads(Path(path).read_text(encoding="utf-8"))
-    if not isinstance(payload, dict) or set(payload) != {"schema_version", "approved_for_publication", "as_of", "records"}:
-        raise ValueError("Unexpected snapshot fields; raw billing metadata is not publishable.")
-    if type(payload["schema_version"]) is not int or payload["schema_version"] != 1:
-        raise ValueError("Unsupported project cost snapshot version.")
-    if payload["approved_for_publication"] is not True:
-        return None, validate_records([])
-    if not isinstance(payload["as_of"], str):
-        raise ValueError("A reviewed snapshot needs an extraction date.")
-    date.fromisoformat(payload["as_of"])
-    return payload["as_of"], validate_records(payload["records"])
+    from .snapshot import read_payload
+    return read_payload(json.loads(Path(path).read_text(encoding="utf-8")))
 
 
 def amount(value, currency):
@@ -105,4 +98,6 @@ def provider_total(frame, provider, column):
     rows = frame[frame["provider"] == provider]
     if rows.empty or rows[column].isna().any():
         return None
-    return sum(rows[column], Decimal("0"))
+    with localcontext() as context:
+        context.prec = 80
+        return sum(rows[column], Decimal("0"))

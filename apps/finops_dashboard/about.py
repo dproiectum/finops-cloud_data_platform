@@ -3,7 +3,7 @@
 import pandas as pd
 import streamlit as st
 
-from project_costs.view import render_project_costs
+from platform_costs.view import render_platform_costs
 
 
 PAGE_GUIDE = [
@@ -16,7 +16,7 @@ PAGE_GUIDE = [
     ("Consumption & Emission", "Explore usage quantities by service, SKU and unit, plus an explicitly illustrative carbon scenario."),
     ("Knowledge Base", "Look up FOCUS fields, cost formulas and FinOps terminology."),
     ("Architecture", "Follow the data lineage, Medallion layers and analytical products."),
-    ("About the Project", "Understand the project, the dashboard pages and the technology stack. Its Project Costs tab covers approved GCP costs and Databricks list-price estimates."),
+    ("About the Project", "Understand the project, the dashboard pages and the technology stack. Its Platform Costs tab covers approved GCP costs and Databricks list-price estimates."),
     ("About Me", "Meet the engineer behind the project and get in touch."),
 ]
 
@@ -39,7 +39,7 @@ def render_about():
     st.title("About the Project")
     st.write("FinOps Control Center is a data-engineering project for cloud-cost reporting, showback and cost analysis.")
     project, guide, stack, costs = st.tabs([
-        "Overview", "Page Guide", "Technology Stack", "Project Costs"
+        "Overview", "Page Guide", "Technology Stack", "Platform Costs"
     ])
     with project:
         st.subheader("From a FinOps Need to a Data Product")
@@ -50,7 +50,7 @@ def render_about():
         st.subheader("What This Portfolio Demonstrates")
         st.markdown("- Automated data processing and validation.\n- A dimensional model and datamarts for FinOps questions.\n- Showback, cost analysis and explainable calculations.\n- Scoped reporting with fixed synthetic demonstration profiles.\n- FinOps applied to the platform's own operating costs.")
         st.subheader("Scope and Limits")
-        st.write("The Azure portfolio is synthetic and does not represent an employer's actual expenditure. Public profile selection demonstrates authorized scopes; it is not user authentication. Project Costs is a separate, approved summary of platform operating costs. Carbon results are teaching scenarios, not measured provider emissions.")
+        st.write("The Azure portfolio is synthetic and does not represent an employer's actual expenditure. Public profile selection demonstrates authorized scopes; it is not user authentication. Platform Costs is a separate, approved summary of platform operating costs. Carbon results are teaching scenarios, not measured provider emissions.")
         st.link_button("Explore the Cloud Project on GitHub", "https://github.com/dproiectum/finops-cloud_data_platform")
     with guide:
         st.subheader("What Each Page Covers")
@@ -61,7 +61,7 @@ def render_about():
         st.table(pd.DataFrame(TECH_STACK, columns=["Layer", "Technology", "Responsibility"]))
         st.caption("Azure is the cost-data context, not the hosting provider of this cloud implementation. GCP and Databricks host the platform.")
     with costs:
-        render_project_costs(embedded=True)
+        render_platform_costs(embedded=True)
 
 
 def render_about_me():

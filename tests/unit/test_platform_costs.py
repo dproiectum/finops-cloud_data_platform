@@ -1,4 +1,4 @@
-"""Project-cost publication, numeric correctness and offline page tests."""
+"""Platform-cost publication, numeric correctness and offline page tests."""
 
 from decimal import Decimal
 import json
@@ -14,9 +14,10 @@ from streamlit.testing.v1 import AppTest
 APP = Path(__file__).resolve().parents[2] / "apps/finops_dashboard"
 sys.path.insert(0, str(APP))
 
-from project_costs.model import amount, load_snapshot, provider_total, validate_records
-from project_costs.publish_snapshot import build_payload, read_aggregate_csv
-from project_costs.view import cost_trend
+from platform_costs.model import amount, load_snapshot, provider_total, validate_records
+from datetime import datetime, timezone
+from platform_costs.snapshot import build_payload as build_automatic_payload
+from platform_costs.view import cost_trend
 from about import PAGE_GUIDE, TECH_STACK
 
 
@@ -32,7 +33,16 @@ def row(provider="GCP", **changes):
     return {**result, **changes}
 
 
-class ProjectCostTests(unittest.TestCase):
+def build_payload(records, as_of):
+    # Legacy offline snapshots remain test fixtures, not the new collector format.
+    frame = validate_records(records)
+    from platform_costs.model import COLUMNS
+    return {'schema_version': 1, 'approved_for_publication': True, 'as_of': as_of,
+            'records': [{key: str(row[key]) if isinstance(row[key], Decimal) else row[key]
+                         for key in COLUMNS} for row in frame.to_dict('records')]}
+
+
+class PlatformCostTests(unittest.TestCase):
     def test_missing_snapshot_is_unavailable_not_zero(self):
         as_of, frame = load_snapshot()
         self.assertIsNone(as_of)
@@ -89,7 +99,7 @@ class ProjectCostTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 load_snapshot(path)
 
-    def test_publisher_round_trip_and_allowlisted_csv(self):
+    def test_snapshot_round_trip_and_allowlisted_records(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "snapshot.json"
             payload = build_payload([row(), row("Databricks")], "2026-10-07")
@@ -98,10 +108,8 @@ class ProjectCostTests(unittest.TestCase):
             self.assertEqual(as_of, "2026-10-07")
             self.assertEqual(len(frame), 2)
             self.assertIn("1234.5678", path.read_text())
-            csv_path = Path(directory) / "raw.csv"
-            csv_path.write_text("project_id,cost\nprivate,12\n")
             with self.assertRaises(ValueError):
-                read_aggregate_csv(csv_path)
+                validate_records([{'project_id': 'private', 'cost': '12'}])
 
     def test_chart_does_not_stack_cost_bases_or_fill_missing_months(self):
         frame = validate_records([row(), row("Databricks", currency="EUR")])
@@ -113,7 +121,7 @@ class ProjectCostTests(unittest.TestCase):
 
     def test_page_renders_without_costs_and_without_live_billing_access(self):
         prefix = f"import sys\nsys.path.insert(0, {str(APP)!r})\n"
-        app = AppTest.from_string(prefix + "from project_costs.view import render_project_costs\nrender_project_costs()\n").run()
+        app = AppTest.from_string(prefix + "from platform_costs.view import render_platform_costs\nrender_platform_costs()\n").run()
         self.assertFalse(app.exception)
         self.assertEqual(len(app.metric), 0)
         self.assertIn("not zero", app.info[0].value)
@@ -121,12 +129,12 @@ class ProjectCostTests(unittest.TestCase):
     def test_currency_filters_keep_unavailable_provider_and_european_numbers(self):
         frame = validate_records([row(), row("Databricks")])
         prefix = f"import sys\nsys.path.insert(0, {str(APP)!r})\n"
-        with patch("project_costs.view.load_snapshot", return_value=("2026-10-07", frame)):
-            app = AppTest.from_string(prefix + "from project_costs.view import render_project_costs\nrender_project_costs()\n").run()
+        with patch("platform_costs.view.load_snapshot", return_value=("2026-10-07", frame)):
+            app = AppTest.from_string(prefix + "from platform_costs.view import render_platform_costs\nrender_platform_costs()\n").run()
             self.assertFalse(app.exception)
             self.assertEqual(app.metric[1].value, "1\u202f134,32 EUR")
             self.assertEqual(app.metric[3].value, "—")
-            app.selectbox(key="project_cost_currency").select("USD").run()
+            app.selectbox(key="platform_cost_currency").select("USD").run()
             self.assertFalse(app.exception)
             self.assertEqual(app.metric[1].value, "—")
             self.assertEqual(app.metric[2].value, "10,12")
@@ -134,7 +142,7 @@ class ProjectCostTests(unittest.TestCase):
             self.assertNotIn("Combined Total", [metric.label for metric in app.metric])
 
     def test_about_guide_and_stack_are_complete(self):
-        self.assertNotIn("Project Costs", [page for page, _ in PAGE_GUIDE])
+        self.assertNotIn("Platform Costs", [page for page, _ in PAGE_GUIDE])
         self.assertIn("About the Project", [page for page, _ in PAGE_GUIDE])
         self.assertIn("About Me", [page for page, _ in PAGE_GUIDE])
         self.assertEqual(len({page for page, _ in PAGE_GUIDE}), len(PAGE_GUIDE))
@@ -144,10 +152,10 @@ class ProjectCostTests(unittest.TestCase):
         self.assertFalse(app.exception)
         self.assertEqual(app.title[0].value, "About the Project")
         self.assertEqual([tab.label for tab in app.tabs[:4]],
-                         ["Overview", "Page Guide", "Technology Stack", "Project Costs"])
+                         ["Overview", "Page Guide", "Technology Stack", "Platform Costs"])
         self.assertEqual(len(app.title), 1)
         self.assertIn("not zero", app.tabs[3].info[0].value)
-        self.assertTrue(any("Project Costs tab" in purpose for _, purpose in PAGE_GUIDE))
+        self.assertTrue(any("Platform Costs tab" in purpose for _, purpose in PAGE_GUIDE))
         self.assertTrue(any("synthetic" in text.value for text in app.markdown))
 
     def test_about_author_profile_and_contact(self):

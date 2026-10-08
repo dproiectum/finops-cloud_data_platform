@@ -22,20 +22,24 @@ tables and the environment-aware `finops_ops.audit` history.
   zeros. Assumption controls remain only in Illustrative Carbon and also update
   the Azure tab, using the same model and existing authorized data.
   Only **Azure** and **Illustrative Carbon** sub-tabs remain. Platform Databricks
-  costs and DBU estimates belong to **About the Project → Project Costs**;
+  costs and DBU estimates belong to **About the Project → Platform Costs**;
 - **Operations & Quality**: critical completeness, pipeline runs, reconciliation
   and DEV/PROD audit separation;
 - **Architecture**: end-to-end lineage, Medallion layers and certified products.
 - **About the Project** (`/about`): project overview, a guide to every page and
-  the actual technology stack. Its **Project Costs** tab presents reviewed monthly
+  the actual technology stack. Its **Platform Costs** tab presents reviewed monthly
   GCP costs and Databricks list-cost estimates, kept separate from the synthetic
   Azure portfolio. The initial snapshot is empty, not zero. See
-  `project_costs/README.md` for source export, validation and the proposed automatic
-  monitoring rollout. Project Costs is not a separate main navigation entry.
+  `platform_costs/README.md` for source export, validation and the prepared automatic
+  monitoring rollout. Platform Costs is not a separate main navigation entry.
 - **About Me** (`/about-me`): a short engineering profile and a clickable contact
   address. No academic status or unverified biography is added.
 
 The application never writes to Unity Catalog.
+
+Platform Costs rollout is documented in [the installation guide](../../docs/platform_costs_setup.md).
+It adds a private GCS snapshot reader; no billing credentials or CSV exports are
+bundled in the image. Cloud resources and schedules must be configured manually.
 
 ## FinOps Inspired presentation
 
@@ -93,7 +97,7 @@ Emission makes **no operational billing query**, including for a private IAP
 administrator. Existing monitoring views, SQL source scripts and query-level
 authorization are retained; this change drops no Databricks table or grant.
 Approved platform DBUs and cost estimates are served only through the reviewed
-Project Costs snapshot under About the Project, not raw live billing telemetry.
+Platform Costs snapshot under About the Project, not raw live billing telemetry.
 Databricks emissions remain unestimated: DBUs alone are not an energy measurement
 or a supported conversion to kgCO2e.
 

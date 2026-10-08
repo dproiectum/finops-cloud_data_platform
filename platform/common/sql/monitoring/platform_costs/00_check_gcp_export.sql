@@ -1,4 +1,4 @@
--- BIGQUERY, NOT DATABRICKS. Read-only initial source coverage check.
+-- BIGQUERY, NOT DATABRICKS. Read-only platform-cost source coverage check.
 -- Estimate bytes processed before running; no table is created or modified.
 -- Loaded dates and row counts do not prove that a month is fully exported.
 SELECT

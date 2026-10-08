@@ -1,11 +1,13 @@
-"""Project costs are published snapshots, not selectable-profile telemetry."""
+"""Platform costs are approved aggregates, not selectable-profile telemetry."""
 
+import os
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
 from formatting import COST_BLUE, SAVINGS_GREEN, chart_layout, measurement_number
-from .model import amount, load_snapshot, provider_total
+from .model import amount, provider_total
+from .reader import load_snapshot
 
 
 def cost_trend(frame, currency):
@@ -24,18 +26,18 @@ def cost_trend(frame, currency):
             customdata=[[amount(value, currency)] for value in totals["reported_cost"]],
             hovertemplate="%{x}<br>%{customdata[0]}<extra>%{fullData.name}</extra>",
         ))
-    figure.update_layout(title="Monthly Project Costs", barmode="group")
+    figure.update_layout(title="Monthly Platform Costs", barmode="group")
     figure.update_xaxes(type="category", title="Usage Month")
     figure.update_yaxes(title=f"Cost ({currency})")
     return chart_layout(figure, 410)
 
 
-def render_project_costs(*, embedded=False):
+def render_platform_costs(*, embedded=False):
     if embedded:
-        st.subheader("Project Costs")
+        st.subheader("Platform Costs")
     else:
         st.markdown('<div class="finops-kicker">FINOPS · PLATFORM OPERATIONS</div>', unsafe_allow_html=True)
-        st.title("Project Costs")
+        st.title("Platform Costs")
     st.write("The cost of operating this FinOps platform, separate from its synthetic Azure portfolio.")
     overview, methodology = st.tabs(["Cost Overview", "Scope & Method"])
     with overview:
@@ -43,21 +45,22 @@ def render_project_costs(*, embedded=False):
             as_of, frame = load_snapshot()
         except (ValueError, OSError):
             # No raw values, filesystem paths or rejected records in the public UI.
-            st.error("The project cost snapshot is unavailable or failed validation.")
+            st.error("The platform cost snapshot is unavailable or failed validation.")
             frame = pd.DataFrame()
             as_of = None
         if frame.empty:
             st.info("No approved cost snapshot is published yet. Unavailable costs are not zero.")
             st.write("This page will show monthly GCP costs, credits and Databricks DBU estimates once the aggregated exports have been reviewed.")
         else:
-            st.caption(f"Reviewed snapshot · extracted {as_of} · not a live billing feed")
+            mode = "Scheduled aggregate" if os.getenv("FINOPS_PLATFORM_COSTS_MODE") == "gcs" else "Bundled snapshot"
+            st.caption(f"{mode} · extracted {as_of} · billing availability may lag behind extraction")
             controls = st.columns(3)
-            currency = controls[0].selectbox("Currency", sorted(frame["currency"].unique()), key="project_cost_currency")
+            currency = controls[0].selectbox("Currency", sorted(frame["currency"].unique()), key="platform_cost_currency")
             frame = frame[frame["currency"] == currency]
-            year = controls[1].selectbox("Cost Year", ["All Available Years", *sorted(frame["month"].str[:4].unique(), reverse=True)], key="project_cost_year")
+            year = controls[1].selectbox("Cost Year", ["All Available Years", *sorted(frame["month"].str[:4].unique(), reverse=True)], key="platform_cost_year")
             if year != "All Available Years":
                 frame = frame[frame["month"].str.startswith(year + "-")]
-            month = controls[2].selectbox("Cost Month", ["All Available Months", *sorted(frame["month"].unique(), reverse=True)], key="project_cost_month")
+            month = controls[2].selectbox("Cost Month", ["All Available Months", *sorted(frame["month"].unique(), reverse=True)], key="platform_cost_month")
             selected = frame if month == "All Available Months" else frame[frame["month"] == month]
             metrics = st.columns(4)
             metrics[0].metric("GCP Cost Before Credits", amount(provider_total(selected, "GCP", "cost_before_credits"), currency))
@@ -99,6 +102,6 @@ def render_project_costs(*, embedded=False):
         st.subheader("FinOps Applied to the Platform Itself")
         st.write("Monthly service aggregates describe the selected GCP project and the two project Databricks workspaces. They are not exact per-job allocations or a controlled Frankfurt–Belgium benchmark.")
         st.markdown("- **GCP Net Cost = Cost Before Credits + Signed Credits.** Credits normally reduce cost; corrections remain signed.\n- **Databricks List Cost Estimate = Σ (signed DBUs × applicable published price).** This is not an invoice or the amount paid after trial credits, discounts or taxes.\n- **No currency conversion or combined invoice total.** If Databricks charges also appear in GCP Marketplace billing, adding the two sources would count them twice.\n- **Partial months and missing values remain visible.** A real zero is displayed as zero; an absent source is unavailable.")
-        st.write("The public page reads only a reviewed, bundled snapshot. It cannot query live billing tables, reveal resource identifiers, or widen access when a demonstration profile changes.")
+        st.write("The public page reads only approved aggregates, either from a private GCS object or an explicitly bundled snapshot. It cannot query billing source tables, reveal resource identifiers, or widen access when a demonstration profile changes. In automatic mode, stale or invalid output is unavailable, not replaced by an old bundled snapshot.")
         st.caption("Platform sustainability belongs in this project section. Databricks emissions are not estimated: DBUs alone do not provide energy consumption or a supported conversion to kgCO₂e.")
         st.markdown("Sources: [Google Cloud Billing export queries](https://docs.cloud.google.com/billing/docs/how-to/bq-examples) · [Databricks pricing system table](https://docs.databricks.com/gcp/en/admin/system-tables/pricing)")
