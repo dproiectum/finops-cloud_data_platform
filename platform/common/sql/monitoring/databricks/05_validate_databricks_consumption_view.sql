@@ -1,4 +1,4 @@
--- CONSUMPTION / STEP 2D: read-only controls after script 03.
+-- PLATFORM MONITORING / STEP 3: read-only controls after script 03.
 -- Run with your own identity; this does not test the dashboard service principal.
 -- Successful assert_true returns NULL. Empty telemetry is NOT zero consumption.
 -- All record types are included, including signed billing corrections.

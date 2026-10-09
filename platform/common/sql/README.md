@@ -5,10 +5,11 @@
 - `gold/data_loading/`: month-scoped dimension, tag, and fact loading;
 - `datamarts/table_refresh/`: fourteen certified analytical tables.
 - `monitoring/`: reusable DBU, list-cost, and Job-run observability queries.
+  `monitoring/databricks/` contains private workspace telemetry checks and views.
   `monitoring/platform_costs/` is the independent real platform-cost workflow;
   its BigQuery scripts must not be executed in Databricks. Follow
   [the installation guide](../../../docs/platform_costs_setup.md).
-- `consumption/`: manual source checks, additive ordinary consumption views and
+- `consumption/`: synthetic Azure source checks, additive consumption views and
   read-only reconciliation controls; no ingestion, source rewrite or carbon estimate.
 - `security/`: additive manual dashboard metadata setup and synthetic entitlement
   checks; viewer authorization is not implemented by these scripts.
@@ -20,20 +21,20 @@ The setup SQL that differs by compute scenario is intentionally stored under
 ## Consumption setup (manual, existing warehouse)
 
 Run `consumption/00_check_azure_consumption.sql` and
-`consumption/01_check_databricks_consumption.sql` first with your own identity.
+`monitoring/databricks/01_check_databricks_consumption.sql` first with your own identity.
 Then execute these files in order in workspace-belgium SQL Editor:
 
 1. `consumption/02_create_azure_consumption_view.sql`: creates only
    `finops_prod.datamart.v_consumption_monthly`, from the existing Gold allocation
    view. Application, service, SKU and unit remain separate. Missing measurements
    stay NULL; corrections keep their sign. Other charge categories are excluded.
-2. `consumption/03_create_databricks_consumption_view.sql`: creates the metadata
+2. `monitoring/databricks/03_create_databricks_consumption_view.sql`: creates the metadata
    schema `finops_ops.monitoring` if absent and its
    `v_databricks_consumption_monthly` view over existing system billing records.
    It includes only the two project workspaces, GCP DBUs, since September 2026.
 3. `consumption/04_validate_azure_consumption_view.sql`: two assertions plus a
    monthly measurement-coverage result. A successful assertion returns NULL.
-4. `consumption/05_validate_databricks_consumption_view.sql`: one assertion plus
+4. `monitoring/databricks/05_validate_databricks_consumption_view.sql`: one assertion plus
    monthly net DBUs by workspace/SKU/origin, including a Genie-free indicator.
 
 Setup DDL can return **No rows returned** on success. Run every validation
@@ -50,3 +51,10 @@ not override inherited privileges. Review access before granting any backend
 permission. The selectable portfolio Admin persona is not authentication and
 must not unlock real operational billing data. DBUs are neither monetary cost nor
 energy/carbon; do not convert them without separately verified inputs.
+
+The Azure scripts belong to business analytics; the Databricks scripts belong
+to Platform FinOps. Their numeric prefixes are preserved for recognition, not
+as a requirement to alternate the two chains. Moving the Databricks SQL files
+does not rename the existing view, change its SQL logic or require its recreation.
+These manual telemetry views are separate from the scheduled aggregate publisher
+in `monitoring/platform_costs/`.

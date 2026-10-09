@@ -66,20 +66,27 @@ def validate_records(records, *, daily=False):
                 raise ValueError("Use a reviewed service/SKU label, without URLs or identities.")
             if row["period_status"] not in {"partial", "closed"}:
                 raise ValueError("Period status must be partial or closed.")
-            expected = "billing_export" if row["provider"] == "GCP" else "list_estimate"
-            if row["cost_basis"] != expected:
-                raise ValueError("GCP requires billing_export; Databricks requires list_estimate.")
+            basis = row["cost_basis"]
+            if basis not in {"billing_export", "list_estimate"} or (
+                row["provider"] == "GCP" and basis != "billing_export"
+            ):
+                raise ValueError("GCP requires billing_export; Databricks supports billing_export or list_estimate.")
+            estimate = basis == "list_estimate"
             parsed = dict(row)
             parsed["cost_before_credits"] = decimal_value(row["cost_before_credits"])
-            parsed["credits"] = decimal_value(row["credits"], optional=row["provider"] == "Databricks")
-            parsed["usage_quantity"] = decimal_value(row["usage_quantity"], optional=row["provider"] == "GCP")
-            if row["provider"] == "Databricks":
+            parsed["credits"] = decimal_value(row["credits"], optional=estimate)
+            parsed["usage_quantity"] = decimal_value(row["usage_quantity"], optional=not estimate)
+            if estimate:
                 if row["usage_unit"] != "DBU" or parsed["credits"] is not None:
                     raise ValueError("Databricks estimates require DBUs and unknown (blank) credits.")
                 parsed["reported_cost"] = parsed["cost_before_credits"]
             else:
                 if row["usage_unit"] not in {"", None} or parsed["usage_quantity"] is not None:
-                    raise ValueError("Do not aggregate incompatible GCP consumption units.")
+                    raise ValueError("Billing exports do not publish aggregated consumption units.")
+                if row["provider"] == "Databricks" and service != "Databricks":
+                    raise ValueError("Marketplace billing must use the reviewed Databricks service label.")
+                if row["provider"] == "GCP" and service == "Databricks":
+                    raise ValueError("Databricks Marketplace charges must not be labelled as GCP services.")
                 with localcontext() as context:
                     context.prec = 80
                     parsed["reported_cost"] = parsed["cost_before_credits"] + parsed["credits"]
@@ -129,8 +136,20 @@ def amount(value, currency):
 
 def provider_total(frame, provider, column):
     rows = frame[frame["provider"] == provider]
+    if rows['cost_basis'].nunique() > 1 or rows['currency'].nunique() > 1:
+        raise ValueError('Separate billing exports, estimates and currencies before summing.')
     if rows.empty or rows[column].isna().any():
         return None
     with localcontext() as context:
         context.prec = 80
         return sum(rows[column], Decimal("0"))
+
+
+def billing_total(frame):
+    """One billing-export total; never include DBU list estimates or invent FX."""
+    billed = frame[frame['cost_basis'] == 'billing_export']
+    if set(billed['provider']) != {'GCP', 'Databricks'} or billed['currency'].nunique() != 1:
+        return None
+    with localcontext() as context:
+        context.prec = 80
+        return sum(billed['reported_cost'], Decimal('0'))

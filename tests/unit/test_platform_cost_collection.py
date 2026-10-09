@@ -14,7 +14,7 @@ sys.path.insert(0, str(ROOT / 'src'))
 sys.path.insert(0, str(ROOT / 'apps/finops_dashboard'))
 
 from finops_cloud.monitoring.platform_costs import (VOLUME, latest_complete_export,
-                                                  prepare_payload, exact_decimal, run)
+                                                  prepare_payload, exact_decimal, run, DAILY)
 from platform_costs.reader import storage_url, load_snapshot
 from platform_costs.snapshot import build_payload, read_payload
 
@@ -146,18 +146,31 @@ class CollectionTests(unittest.TestCase):
         spark.createDataFrame.assert_not_called()
 
     def test_preview_never_writes_and_publication_replaces_one_dedicated_snapshot(self):
-        spark, utils, monthly = Mock(), Mock(), Mock()
+        spark, utils, monthly, daily = Mock(), Mock(), Mock(), Mock()
         monthly.columns = ['month', 'provider', 'service', 'currency', 'cost_before_credits',
                            'credits', 'usage_quantity', 'usage_unit', 'cost_basis',
                            'period_status', 'collection_run_id', 'collected_at']
-        spark.table.return_value.columns = monthly.columns
+        daily.columns = ['usage_date', *monthly.columns]
+        def table(name):
+            result = Mock()
+            result.columns = daily.columns if name == DAILY else monthly.columns
+            return result
+        spark.table.side_effect = table
+        gcp = [{**record(), 'usage_date': '2026-09-01'},
+               {**record('Databricks', service='Databricks', currency='EUR',
+                         credits='0', usage_quantity=None, usage_unit='', cost_basis='billing_export'),
+                'usage_date': '2026-09-01'}]
+        db = [{**record('Databricks'), 'usage_date': '2026-09-01'}]
+        meta = manifest(schema_version=3, granularity='daily',
+                        billing_scope='finops_and_databricks_marketplace', row_count=2)
         for dry_run in (True, False):
             utils.reset_mock()
             monthly.reset_mock()
             with patch('finops_cloud.monitoring.platform_costs.datetime') as clock, \
-                 patch('finops_cloud.monitoring.platform_costs.latest_complete_export', return_value=('/valid', manifest(row_count=1))), \
-                 patch('finops_cloud.monitoring.platform_costs._collect', side_effect=[[record()], [record('Databricks')]]), \
+                 patch('finops_cloud.monitoring.platform_costs.latest_complete_export', return_value=('/valid', meta)), \
+                 patch('finops_cloud.monitoring.platform_costs._collect', side_effect=[gcp, db]), \
                  patch('finops_cloud.monitoring.platform_costs._monthly_frame', return_value=monthly), \
+                 patch('finops_cloud.monitoring.platform_costs._daily_frame', return_value=daily), \
                  patch('finops_cloud.monitoring.platform_costs._audit') as audit:
                 clock.now.return_value = NOW
                 result = run(spark, utils, confirmation='PUBLISH_PLATFORM_COSTS', dry_run=dry_run)
@@ -174,6 +187,7 @@ class CollectionTests(unittest.TestCase):
                     self.assertEqual(args[0], VOLUME + '/published/latest.json')
                     self.assertTrue(kwargs['overwrite'])
                     payload = json.loads(args[1])
+                    self.assertEqual(payload['schema_version'], 4)
                     read_payload(payload, remote=True, now=NOW)
                     self.assertEqual(audit.call_args.args[3], 'PUBLISHED')
 

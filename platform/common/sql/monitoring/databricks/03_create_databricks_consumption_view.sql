@@ -1,4 +1,4 @@
--- CONSUMPTION / STEP 2B: manual, additive operational telemetry view.
+-- PLATFORM MONITORING / STEP 2: manual, additive operational telemetry view.
 -- Run as YOUR Databricks account, which passed the system.billing.usage check.
 -- No grants to the public dashboard and no change to existing audit views.
 -- The separate schema organizes real telemetry, but is NOT a deny policy:

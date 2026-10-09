@@ -22,10 +22,20 @@ The single validation/publication contract is `model.py` plus `snapshot.py`.
 The collector notebook imports it from this directory so serving and collection
 cannot silently disagree. The Docker app remains self-contained.
 
-GCP amounts retain signed credits; net cost = cost + credits. Databricks cost is
-a published-list **estimate**, not a paid invoice. Different currencies remain
-separate; no total combines GCP bills with Databricks estimates. Marketplace
-Databricks charges may overlap. All automatically collected months remain partial
+Billing exports retain signed credits; net cost = cost + credits. The BigQuery
+export explicitly includes native services in `global-repeater-355412` and the
+Databricks service in the Marketplace project `pr-5193ad409e7b591`. Marketplace
+rows are categorized as `provider=Databricks, cost_basis=billing_export`; DBU
+reference rows use `provider=Databricks, cost_basis=list_estimate` instead.
+The monthly/daily key already includes `cost_basis`: no new Delta column or
+duplicate-source file is needed. Project identities never enter the public JSON.
+
+`Total Platform Cost` adds only the two billing-export components in the same
+currency, currently EUR. It is a recorded export total, not a final invoice or
+proof of payment; taxes/charges outside the explicit project scope can be absent.
+Missing components or incompatible currencies yield an unavailable total, not
+an invented zero or FX conversion. The separate Databricks published-list USD
+estimate is **never** added to this total. All automatically collected months remain partial
 until independently reconciled; extraction freshness does not prove source coverage.
 DBUs are not energy or a supported carbon conversion.
 
@@ -42,17 +52,18 @@ annotation, with no columns or invented zero costs. Source availability may lag.
 
 One grouped-column chart switches grain with `View by`. Columns are side by
 side, never stacked or overlaid, with a distinct offset group per provider.
-GCP net costs stay on the left
-axis (export currency, currently EUR), and Databricks list-price estimates stay
-on the right (currently USD). Both remain visible; there is no global currency
-filter hiding a provider. If a provider has multiple currencies, its own selector
-chooses one before aggregation. Axis titles and tooltips retain the currency;
-the axes use the theme's neutral text color and are titled `Cost in Euro` (left)
-and `Cost in USD` (right, rotated 180° from its original orientation) for the current source currencies. Titles follow the
-selected currency if it changes; provider names remain in the legend.
-Databricks tooltips also show net DBUs. Column heights are not a direct cost
-comparison: *Separate currency scales — no currency conversion. Column heights do
-not directly compare costs.* This note uses 12 px; legends and axis titles use 14 px.
+The current billing chart places GCP services and Databricks Marketplace net
+costs on the same EUR axis. Three tiles show GCP Services Net Cost, Databricks
+Marketplace Net Cost and Total Platform Cost. USD list-price estimates and DBUs
+appear in a separate, initially collapsed reference section, with their own chart
+and table but the same date filters. Billing details do not show meaningless DBUs.
+If billing currencies differ, the combined chart/total is unavailable and the
+provider panels remain separate. No currency conversion is performed.
+
+Legacy snapshots retain the former EUR/USD dual-axis view and display a warning:
+the GCP component does not include Marketplace billing and no complete platform
+total is available. The separate-axis note still applies to this legacy view.
+In both views, the italic chart note uses 12 px; legends and axis titles use 14 px.
 The note is inside the chart below the legend, with the same left anchor, and
 wraps on narrow screens. The legend names `Google Cloud (GCP)` explicitly.
 Hover shows only the pointed column. A scoped Streamlit v2 component uses the
@@ -70,16 +81,23 @@ This is not presented as an official Databricks brand color. These
 colors apply only to Platform Costs. Service breakdowns use separate provider
 panels, never a shared EUR/USD ranking, and detail amounts carry their row currency.
 
-Daily publication uses snapshot version 3 with allowlisted `daily_records` and
-derived monthly `records`. The reader validates their reconciliation before
-display. Legacy monthly version 2 remains readable during rollout; Daily is not
+Marketplace publication uses snapshot version 4 with allowlisted `daily_records`
+and derived monthly `records`. All three components are required: native GCP,
+Marketplace billing, and Databricks USD usage estimates. The reader validates
+their reconciliation before display. Source dates for both billing components
+are checked against the BigQuery extraction, not the DBU extraction.
+The GCP COMPLETE manifest is version 3 with `billing_scope=finops_and_databricks_marketplace`.
+Legacy monthly version 2 and daily version 3 remain readable during rollout; Daily is not
 offered until daily data is published. The daily and monthly datasets are never
 added together. Both sources must be present. The GCS path and reader IAM stay
 unchanged; no dashboard access to raw billing or new cloud key is required.
+The upgraded collector may preview a legacy export but cannot publish it:
+Marketplace billing must be present before replacing `latest.json`.
 
-The Databricks query deliberately selects published prices in USD. An EUR label
-would require actual EUR prices or a sourced, dated FX policy; no implicit
-conversion is performed. GCP keeps the currency reported by its export.
+The DBU query deliberately selects published prices in USD. Marketplace EUR
+comes directly from Cloud Billing, not an estimated USD-to-EUR conversion.
+The USD estimate is not expected to match a legacy Databricks Usage screen that
+has different refresh times, date filters or product coverage.
 
 ## Implementation and manual rollout
 

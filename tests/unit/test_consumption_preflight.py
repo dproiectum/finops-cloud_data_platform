@@ -12,14 +12,22 @@ sys.path.insert(0, str(ROOT / 'src'))
 from finops_cloud.sql.runner import split_statements  # noqa: E402
 
 SQL = ROOT / 'platform/common/sql/consumption'
+DB_SQL = ROOT / 'platform/common/sql/monitoring/databricks'
 
 
 class ConsumptionPreflightTests(unittest.TestCase):
+    def test_business_consumption_and_private_monitoring_are_separate(self):
+        self.assertEqual(len(list(SQL.glob('*.sql'))), 3)
+        self.assertTrue(all('azure' in path.name for path in SQL.glob('*.sql')))
+        self.assertEqual(len(list(DB_SQL.glob('*.sql'))), 3)
+        self.assertTrue(all('databricks' in path.name for path in DB_SQL.glob('*.sql')))
+
     def test_checks_are_read_only_and_split_without_templates(self):
         for name, count in [('00_check_azure_consumption.sql', 3),
                             ('01_check_databricks_consumption.sql', 2)]:
             with self.subTest(file=name):
-                text = (SQL / name).read_text()
+                directory = DB_SQL if 'databricks' in name else SQL
+                text = (directory / name).read_text()
                 statements = split_statements(text)
                 self.assertEqual(len(statements), count)
                 for statement in statements:
@@ -44,7 +52,7 @@ class ConsumptionPreflightTests(unittest.TestCase):
         self.assertNotIn('abs(', sample.lower())
 
     def test_dbu_check_limits_workspaces_and_keeps_signed_corrections(self):
-        statements = split_statements((SQL / '01_check_databricks_consumption.sql').read_text())
+        statements = split_statements((DB_SQL / '01_check_databricks_consumption.sql').read_text())
         for statement in statements:
             bare = re.sub(r'--[^\n]*', '', statement)
             self.assertIn("('8259550392658865', '8259550830613689')", bare)

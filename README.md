@@ -10,6 +10,19 @@ The portfolio data does not represent actual company expenditure.
 This repository contains the cloud implementation. The independent data
 generator and local proof of concept are separate projects.
 
+## Two complementary FinOps scopes
+
+| Scope | Inputs | Products and evidence |
+| --- | --- | --- |
+| Azure FinOps analytics | Synthetic Azure FOCUS cost-and-usage files | Governed datamarts, showback, pricing analysis, allocation and illustrative consumption/carbon scenarios. These are not actual company costs or measured emissions. |
+| Platform FinOps | Real GCP billing exports and Databricks usage records | Private operational telemetry, approved Platform Costs aggregates, and evidence for cost/performance comparisons. List-price estimates are not paid invoices. |
+
+The second scope measures the resources used to produce the first. It has a
+separate collection workflow: it does not reload or modify the synthetic FOCUS
+history. Both scopes reuse one dashboard and common operational components.
+Platform Costs code is prepared; cloud installation and end-to-end acceptance
+remain manual. See the [documentation index](docs/README.md) for each scope.
+
 ## Architecture
 
 ```text
@@ -47,6 +60,24 @@ The Classic setup stores managed Delta tables separately in
 
 See the [architecture](docs/architecture.md) and [data model](docs/data_model.md)
 for the detailed responsibilities, tables, and analytical grain.
+
+The independent Platform Costs path is:
+
+```text
+GCP billing -> BigQuery aggregation -> private GCS completed export
+Databricks system.billing ----------> collector notebook
+                                      |
+                         finops_ops.monitoring snapshot and audit
+                                      |
+                         private approved GCS JSON summary
+                                      |
+                         About the Project -> Platform Costs
+```
+
+Only approved aggregates are served publicly. Detailed billing and workspace
+telemetry are not exposed by selecting a portfolio profile. A future estimate
+of this platform's emissions would need its own method and evidence; the Azure
+carbon illustration does not measure the platform's footprint.
 
 ## Processing workflows
 
@@ -167,7 +198,8 @@ Local package development requires Python **3.11 or 3.12**.
 platform/serverless/           Default Storage SQL and Serverless Job definitions
 platform/classic_compute/      Managed GCS SQL and Classic Job definitions
 platform/common/notebooks/     Shared pipeline and operational notebooks
-platform/common/sql/           Gold, datamarts, controls, security, consumption
+platform/common/sql/           Gold, datamarts, controls, security, Azure consumption
+platform/common/sql/monitoring/ Private Databricks telemetry and Platform Costs
 config/                       Environment and shared RAW/OPS configuration
 contracts/                    Versioned FOCUS Data Contract
 src/finops_cloud/audit/        Runs, snapshots, reconciliation
@@ -175,6 +207,7 @@ src/finops_cloud/medallion/    Bronze, Silver, Gold, contract, Delta operations
 src/finops_cloud/storage/      Discovery and optional archival
 src/finops_cloud/sql/          SQL loading and rendering
 src/finops_cloud/pipelines/    Processing orchestration
+src/finops_cloud/monitoring/   Independent platform-cost collection and publication
 apps/finops_dashboard/         Streamlit application and deployment configuration
 tests/                        Unit tests and integration-test guidance
 docs/                         Architecture and operational manuals

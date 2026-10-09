@@ -1,4 +1,4 @@
--- CONSUMPTION / STEP 1B: read-only DBU availability check.
+-- PLATFORM MONITORING / STEP 1: read-only DBU availability check.
 -- Run separately from the Azure check with YOUR existing Databricks identity.
 -- This does not test the Cloud Run service principal's permissions.
 -- Permission errors: share the error; do not grant broad system-table access.

@@ -286,9 +286,12 @@ class DailyCostsTests(unittest.TestCase):
                 result.columns = (['wrong'] if wrong_schema else daily.columns) if name == DAILY else monthly.columns
                 return result
             spark.table.side_effect = table
+            market = row('Databricks', service='Databricks', currency='EUR',
+                         credits='0', usage_quantity=None, usage_unit='', cost_basis='billing_export')
+            meta = manifest(schema_version=3, row_count=2, billing_scope='finops_and_databricks_marketplace')
             with patch('finops_cloud.monitoring.platform_costs.datetime') as clock, \
-                 patch('finops_cloud.monitoring.platform_costs.latest_complete_export', return_value=('/valid', manifest(row_count=1))), \
-                 patch('finops_cloud.monitoring.platform_costs._collect', side_effect=[[row()], [row('Databricks')]]), \
+                 patch('finops_cloud.monitoring.platform_costs.latest_complete_export', return_value=('/valid', meta)), \
+                 patch('finops_cloud.monitoring.platform_costs._collect', side_effect=[[row(), market], [row('Databricks')]]), \
                  patch('finops_cloud.monitoring.platform_costs._monthly_frame', return_value=monthly), \
                  patch('finops_cloud.monitoring.platform_costs._daily_frame', return_value=daily), \
                  patch('finops_cloud.monitoring.platform_costs._audit') as audit:
@@ -302,11 +305,11 @@ class DailyCostsTests(unittest.TestCase):
                 else:
                     result = run(spark, utils, dry_run=False, confirmation='PUBLISH_PLATFORM_COSTS')
                     self.assertEqual(result['granularity'], 'daily')
-                    self.assertEqual(result['daily_rows'], 2)
+                    self.assertEqual(result['daily_rows'], 3)
                     monthly.write.mode.return_value.insertInto.assert_called_once_with(MONTHLY)
                     daily.write.mode.return_value.insertInto.assert_called_once_with(DAILY)
                     utils.fs.put.assert_called_once()
-                    self.assertEqual(json.loads(utils.fs.put.call_args.args[1])['schema_version'], 3)
+                    self.assertEqual(json.loads(utils.fs.put.call_args.args[1])['schema_version'], 4)
                     self.assertEqual(audit.call_args.args[3], 'PUBLISHED')
 
     def test_daily_preview_never_writes(self):
@@ -328,8 +331,8 @@ class DailyCostsTests(unittest.TestCase):
         self.assertIn("prices.currency_code = 'USD'", db)
         self.assertIn('GROUP BY usage_date, month, service', db)
         bq = (sql / '01_export_gcp_to_gcs.sql').read_text()
-        self.assertIn("2 AS schema_version, 'daily' AS granularity", bq)
-        self.assertIn('GROUP BY usage_date, month, service, currency', bq)
+        self.assertIn("3 AS schema_version, 'daily' AS granularity", bq)
+        self.assertIn('GROUP BY usage_date, month, provider, service, currency', bq)
         setup = (sql / '03_create_monitoring_objects.sql').read_text()
         self.assertIn('CREATE TABLE IF NOT EXISTS finops_ops.monitoring.platform_cost_daily', setup)
         self.assertNotIn('DROP ', setup)

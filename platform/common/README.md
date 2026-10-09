@@ -10,6 +10,8 @@ and Classic Compute:
 - `sql/gold`: Gold table/view creation, month loading, and the manual allocation policy;
 - `sql/datamarts`: certified analytical table refreshes.
 - `sql/monitoring`: Job-run duration, DBU, and list-cost analysis.
+- `sql/monitoring/databricks`: private workspace consumption views and checks;
+- `sql/consumption`: synthetic Azure consumption views and checks;
 - `notebooks/monitoring`: independent Platform Costs collection and publication;
 - `sql/monitoring/platform_costs`: BigQuery export, Databricks collection,
   additive monitoring setup and controls, with explicit execution engines.

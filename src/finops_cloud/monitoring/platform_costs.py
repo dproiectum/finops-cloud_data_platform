@@ -42,18 +42,22 @@ def latest_complete_export(fs, now):
         if not isinstance(manifest, dict):
             raise ValueError('Invalid GCP completion manifest.')
         version = manifest.get('schema_version')
-        if type(version) is not int and not (isinstance(version, str) and version in {'1', '2'}):
+        if type(version) is not int and not (isinstance(version, str) and version in {'1', '2', '3'}):
             raise ValueError('Unsupported GCP manifest version.')
         version = int(version)
         expected = {'schema_version', 'run_id', 'extracted_at', 'row_count', 'status'}
-        if version == 2:
+        if version >= 2:
             expected.add('granularity')
+        if version == 3:
+            expected.add('billing_scope')
         if not isinstance(manifest, dict) or set(manifest) != expected:
             raise ValueError('Unexpected GCP manifest fields.')
-        if version not in {1, 2} or manifest['run_id'] != name or manifest['status'] != 'COMPLETE':
+        if version not in {1, 2, 3} or manifest['run_id'] != name or manifest['status'] != 'COMPLETE':
             raise ValueError('Inconsistent GCP completion manifest.')
-        if version == 2 and manifest['granularity'] != 'daily':
+        if version >= 2 and manifest['granularity'] != 'daily':
             raise ValueError('Unsupported GCP export granularity.')
+        if version == 3 and manifest['billing_scope'] != 'finops_and_databricks_marketplace':
+            raise ValueError('Unsupported GCP billing scope.')
         raw_count = manifest['row_count']  # BigQuery JSON represents INT64 as strings.
         if not (type(raw_count) is int or isinstance(raw_count, str) and re.fullmatch(r'[0-9]+', raw_count)):
             raise ValueError('Invalid GCP row count.')
@@ -72,13 +76,19 @@ def prepare_payload(gcp_rows, databricks_rows, manifest, now):
     from platform_costs.model import COLUMNS, monthly_from_daily
     if len(gcp_rows) != manifest['row_count']:
         raise ValueError('GCP export row count differs from its completion manifest.')
+    marketplace = str(manifest['schema_version']) == '3'
     for rows, provider in ((gcp_rows, 'GCP'), (databricks_rows, 'Databricks')):
-        if not rows or any(row.get('provider') != provider for row in rows):
+        allowed = {'GCP', 'Databricks'} if provider == 'GCP' and marketplace else {provider}
+        basis = 'billing_export' if provider == 'GCP' else 'list_estimate'
+        if not rows or any(row.get('provider') not in allowed or row.get('cost_basis') != basis for row in rows):
             raise ValueError('Missing source or wrong source provider.')
         if any(row.get('period_status') != 'partial' for row in rows):
             raise ValueError('Automatic collection cannot declare billing months closed.')
+    if marketplace and (manifest.get('billing_scope') != 'finops_and_databricks_marketplace'
+                        or {row['provider'] for row in gcp_rows} != {'GCP', 'Databricks'}):
+        raise ValueError('Missing or inconsistent Databricks Marketplace billing scope.')
     daily_records = None
-    if str(manifest['schema_version']) == '2':
+    if str(manifest['schema_version']) in {'2', '3'}:
         daily_records = gcp_rows + databricks_rows
         monthly = monthly_from_daily(daily_records)
         records = [{key: row[key] for key in COLUMNS} for row in monthly.to_dict('records')]
@@ -178,9 +188,14 @@ def run(spark, dbutils, *, confirmation='', dry_run=True):
                    'gcp_extracted_at': manifest['extracted_at'],
                    'period_status': 'partial', 'collection_run_id': run_id,
                    'granularity': 'daily' if daily_records is not None else 'monthly',
-                   'daily_rows': len(daily_records or [])}
+                   'daily_rows': len(daily_records or []),
+                   'marketplace_billing': payload['schema_version'] == 4,
+                   'marketplace_rows': sum(row['provider'] == 'Databricks' and row['cost_basis'] == 'billing_export'
+                                           for row in (daily_records or payload['records']))}
         if dry_run:
             return summary
+        if payload['schema_version'] != 4:
+            raise ValueError('Marketplace billing is missing: update the BigQuery scheduled SQL and rerun its full export before publishing.')
         # Additive setup must already have been executed manually.
         expected = monthly.columns
         if spark.table(MONTHLY).columns != expected:

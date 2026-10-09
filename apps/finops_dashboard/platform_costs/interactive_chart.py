@@ -26,7 +26,7 @@ def chart_component():
         js=plotly_bundle() + SCRIPT.read_text(), isolate_styles=False)
 
 
-def render_cost_chart(figure):
+def render_cost_chart(figure, *, key='platform_cost_hover_chart'):
     # Pass records as structured data, never interpolate source strings into JS/HTML.
     chart_component()(data={'figure': json.loads(figure.to_json())},
-                      key='platform_cost_hover_chart', width='stretch', height=510)
+                      key=key, width='stretch', height=510)

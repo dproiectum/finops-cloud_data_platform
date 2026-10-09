@@ -6,6 +6,20 @@ Cette chaîne suit les dépenses réelles de la plateforme, indépendamment des
 consommations Azure fictives. L'utilisateur exécute toutes les étapes cloud.
 Ne pas supprimer de catalogue, de table existante ou de source FOCUS.
 
+Le périmètre de facturation est explicite :
+
+- projet `global-repeater-355412` : services GCP natifs ;
+- projet Marketplace `pr-5193ad409e7b591` : uniquement le service Databricks ;
+- estimation DBU des deux workspaces : référence USD distincte, jamais ajoutée
+  aux montants de l'export Billing.
+
+`Total Platform Cost` additionne les deux composantes Billing dans la même
+devise (actuellement EUR), après crédits signés et avant arrondi d'affichage.
+Ce total porte sur les enregistrements exportés : ce n'est ni une facture finale
+ni une preuve de paiement. Les charges sans projet ou hors périmètre peuvent manquer.
+Une composante absente ne devient pas zéro. Les anciennes publications restent
+lisibles, avec un avertissement et sans total complet.
+
 ```text
 BigQuery (export GCP) → export Parquet GCS avec marqueur COMPLETE
                                            │
@@ -50,10 +64,15 @@ cd "/Users/dtl/Desktop/PFE/FinOps Cloud Data Platform"
 git status --short
 git remote get-url origin
 git diff --check
-git add -A -- README.md pyproject.toml apps/finops_dashboard platform \
-  src/finops_cloud/monitoring tests/unit docs/platform_costs_setup.md
+git add -- apps/finops_dashboard/platform_costs \
+  platform/common/sql/monitoring/platform_costs \
+  platform/common/notebooks/monitoring/collect_platform_costs.ipynb \
+  src/finops_cloud/monitoring/platform_costs.py docs/platform_costs_setup.md \
+  tests/unit/test_platform_costs.py tests/unit/test_platform_cost_collection.py \
+  tests/unit/test_platform_cost_daily.py tests/unit/test_platform_cost_interaction.py \
+  tests/unit/test_platform_cost_marketplace.py
 git diff --cached --stat
-git commit -m "Add automated Platform Costs monitoring and private GCS serving"
+git commit -m "Separate Marketplace billing from Databricks usage estimates"
 git push origin main
 ```
 
@@ -168,8 +187,11 @@ exposée en DECIMAL(38,16), pas en flottants ; les DBU source gardent leur préc
 L'affichage à deux décimales n'intervient qu'au dashboard. Les mois restent
 `partial`, même si le script réussit.
 
-Les crédits signés sont conservés. Le filtre ne couvre que le projet FinOps et
-la période depuis septembre 2026. Des taxes ou charges sans projet peuvent être
+Les crédits signés sont conservés. Le filtre couvre le projet FinOps et son
+projet Marketplace Databricks explicitement identifié, depuis septembre 2026.
+Les lignes Marketplace portent `provider=Databricks, cost_basis=billing_export` ;
+les lignes natives sont `provider=GCP, cost_basis=billing_export`. Un autre service
+du projet Marketplace n'est pas inclus. Des taxes ou charges sans projet peuvent être
 absentes ; c'est un suivi opérationnel par mois d'usage UTC, pas une facture
 comptable réconciliée. Un export récent peut toujours avoir un historique incomplet.
 
@@ -218,8 +240,11 @@ dry_run = true
 confirmation = (vide)
 ```
 
-Résultat attendu : `PREVIEW`, deux nombres de lignes positifs et le timestamp
-de l'export GCP. Aucune table ni aucun objet de publication n'est écrit.
+Résultat attendu : `PREVIEW`, deux nombres de lignes source positifs,
+`marketplace_billing=true`, `marketplace_rows>0` et le timestamp de l'export GCP.
+Le nombre `gcp_rows` inclut les deux catégories provenant de BigQuery : GCP
+natif et Databricks Marketplace. `databricks_rows` désigne uniquement les
+estimations issues de system.billing. Aucune publication n'est écrite en preview.
 
 Après validation du périmètre et des libellés destinés au site public :
 
@@ -234,7 +259,8 @@ sont donc prises en compte. Il écrit ensuite un seul objet GCS `latest.json` et
 l'audit. Exécuter `04_validate_platform_costs.sql` dans SQL Editor : les assertions
 réussies renvoient NULL, puis les totaux et l'historique sont affichés.
 
-Les deux sources sont exigées. Des prix absents, ambigus ou ne couvrant pas tout
+Les deux sources et les trois composantes sont exigées pour le nouveau périmètre.
+Des prix absents, ambigus ou ne couvrant pas tout
 l'intervalle d'usage Databricks empêchent la publication. Les exports GCP doivent
 dater de moins de 48 heures. Un échec de validation n'efface pas le dernier objet.
 Les deux tables Delta, GCS et audit ne forment pas une transaction distribuée :
@@ -274,12 +300,16 @@ FINOPS_PLATFORM_COSTS_MAX_AGE_HOURS=48
 Déployer la nouvelle version du code via le push/trigger Cloud Build normal,
 puis vérifier que la révision conserve ces variables. Ouvrir **About the Project
 → Platform Costs**, recharger après cinq minutes maximum pour le cache, et
-vérifier GCP en EUR à gauche et Databricks en USD à droite sur le même graphique.
+vérifier les trois tiles : GCP Services Net Cost, Databricks Marketplace Net Cost
+et Total Platform Cost en EUR. Le graphique principal utilise une même échelle
+EUR pour les deux composantes Billing. La référence Databricks DBU/USD est dans
+une section repliable distincte et n'entre jamais dans le total.
 Le choix **View by → Daily / Monthly / Yearly** change la granularité ; Daily apparaît
 uniquement après publication des données quotidiennes. Il n'y a plus de filtre
 global de devise masquant une source. Les données ne sont pas converties entre
-devises et ne sont pas additionnées en une facture totale. Les détails de services
-restent séparés par fournisseur pour éviter un classement comparant EUR et USD.
+devises. Les lignes Billing dans la même devise s'additionnent une seule fois ;
+les estimations USD n'y sont jamais ajoutées. Le total est indisponible si une
+composante manque ou si les devises diffèrent.
 
 Les filtres **Year** (All Years ou une année à partir de 2025) et **Month**
 (All Months ou un mois de calendrier) sont communs aux trois vues. Un mois choisi
@@ -340,9 +370,9 @@ Ordre de déploiement, exécuté manuellement par l'utilisateur :
 1. Mettre temporairement en pause le Job `finops-platform-costs-daily` pendant
    cette mise à niveau. Ne pas supprimer le Job ni la planification BigQuery.
 2. Publier le code revu sur GitHub et attendre le build/déploiement Cloud Run.
-   Le nouveau lecteur accepte les snapshots mensuels v2 existants ainsi que les
-   snapshots quotidiens v3. Vérifier les variables GCS et conserver les IAM actuels.
-   Déployer le lecteur avant de publier un v3 : l'ancien lecteur le refuserait.
+   Le nouveau lecteur accepte les snapshots mensuels v2, quotidiens v3 et le
+   nouveau périmètre Marketplace v4. Vérifier les variables GCS et conserver les IAM.
+   Déployer le lecteur avant de publier un v4 : l'ancien lecteur le refuserait.
 3. Faire Pull dans le Git folder Databricks Belgium. Exécuter à nouveau
    `03_create_monitoring_objects.sql` : les objets existants sont conservés et
    `finops_ops.monitoring.platform_cost_daily` est créée si elle manque.
@@ -352,22 +382,27 @@ Ordre de déploiement, exécuté manuellement par l'utilisateur :
    Remplacer le SQL enregistré par **tout** le nouveau `01_export_gcp_to_gcs.sql`.
    Conserver EU, le compte d'export, les notifications et **05:10 UTC**. Le push
    GitHub ne met pas à jour cette copie du SQL. Lancer aussi le script entier une
-   fois dans l'éditeur pour tester. Un export quotidien porte un manifeste v2,
-   `granularity=daily`, puis les fichiers Parquet et COMPLETE.
+   fois dans l'éditeur pour tester. Un export quotidien porte un manifeste v3,
+   `granularity=daily`, `billing_scope=finops_and_databricks_marketplace`, puis les
+   fichiers Parquet et COMPLETE. Ne pas modifier d'ancien manifeste manuellement.
 5. Dans le notebook, redémarrer Python si des modules étaient déjà chargés et
    exécuter toutes les cellules avec `dry_run=true`, confirmation vide.
-   Attendre `PREVIEW`, `granularity=daily`, `daily_rows>0` et les deux sources.
+   Attendre `PREVIEW`, `granularity=daily`, `daily_rows>0`,
+   `marketplace_billing=true`, `marketplace_rows>0` et les deux sources.
    Un GCP mensuel ancien reste accepté en mode de transition, mais ne donne pas
-   la vue Daily : utiliser le nouvel export complet, sans modifier d'ancien dossier.
+   la vue Daily : il peut être prévisualisé, pas republié par le collecteur mis à
+   niveau. Utiliser le nouvel export complet, sans modifier d'ancien dossier.
 6. Choisir `dry_run=false`, `confirmation=PUBLISH_PLATFORM_COSTS`, réexécuter la
    cellule des paramètres puis la collecte. Attendre `PUBLISHED` et
-   `granularity=daily`. Les deux tables privées sont remplacées, puis le même
+   `granularity=daily`, `marketplace_billing=true`. Les deux tables privées sont remplacées, puis le même
    `published/latest.json` est écrit ; aucun changement d'URI, d'IAM Cloud Run
    ou de variable d'environnement n'est requis.
 7. Exécuter `04_validate_platform_costs.sql`. Les assertions contrôlent les clés
    quotidiennes, les dates et la réconciliation daily/monthly (montants, crédits,
    DBU et collection_run_id). Vérifier dans le dashboard **View by → Daily**,
-   choisir le mois, puis revenir à Monthly et contrôler les totaux. Le cache
+   choisir le mois, puis revenir à Monthly et contrôler les totaux Billing en EUR
+   avec le deuxième résultat de `00_check_gcp_export.sql` dans BigQuery, à la même
+   date d'extraction. Ne pas sommer les lignes déjà arrondies du tableau. Le cache
    peut retarder l'affichage de cinq minutes.
 8. Réactiver le même Job à **08:43 Europe/Paris** ; vérifier le prochain run
    planifié BigQuery sous son compte de service et le prochain run Databricks.
@@ -377,7 +412,37 @@ La limite de volume reste explicite : 10 000 lignes par source, 20 000 lignes
 quotidiennes publiées au maximum et un JSON de 4 MiB. Un dépassement échoue
 sans tronquer l'historique et sans remplacer la publication par des zéros.
 
-#### Pourquoi Databricks reste en USD
+#### Mise à niveau Marketplace d'une chaîne Daily déjà installée
+
+Il n'y a pas de nouvel objet Delta ni de colonne supplémentaire : `provider` et
+`cost_basis` existent déjà dans les clés des tables. Le nouveau collecteur écrit
+les composantes séparément et publie un snapshot v4. Ne pas supprimer les tables.
+
+1. Mettre en pause le Job Databricks de collecte, pas les pipelines Azure.
+2. Pousser le code revu puis attendre le build Cloud Run réussi : le lecteur v4
+   doit être déployé avant d'écrire le nouveau JSON.
+3. Faire Pull du Git folder Belgium. Si les tables Daily existent déjà, aucun
+   changement DDL n'est nécessaire ; sinon exécuter le `03_create...` additif.
+4. Dans BigQuery, exécuter `00_check_gcp_export.sql`. Vérifier la présence du
+   projet Marketplace et les montants avec la même période que Billing Reports.
+5. Remplacer le SQL de la Scheduled Query existante par tout le nouveau
+   `01_export_gcp_to_gcs.sql`, conserver EU/05:10 UTC/le compte de service,
+   enregistrer et exécuter le script complet une fois. Le même dataset de compte
+   contient déjà les lignes Marketplace ; aucun nouveau grant ou secret n'est requis.
+6. Dans le notebook de collecte, redémarrer Python puis exécuter toutes les
+   cellules en `dry_run=true`. Vérifier les indicateurs Marketplace du preview.
+7. Publier avec `dry_run=false` et `confirmation=PUBLISH_PLATFORM_COSTS`, puis
+   exécuter `04_validate_platform_costs.sql`. Le total EUR n'utilise que
+   `cost_basis='billing_export'` ; les USD restent dans `list_estimate`.
+8. Recharger le site après le cache (cinq minutes maximum), vérifier le total,
+   les détails EUR et la référence USD distincte ; réactiver le même Job.
+
+Les projets hors de cette liste ne deviennent pas automatiquement publics.
+Ne pas modifier le projet système Marketplace ni l'affecter à un autre compte.
+Sources : https://docs.cloud.google.com/marketplace/docs/manage-billing
+et https://docs.databricks.com/gcp/en/admin/account-settings/account
+
+#### Pourquoi l'estimation DBU reste en USD
 
 Le SQL sélectionne explicitement `prices.currency_code = 'USD'` et publie un
 `list_estimate`. Ce n'est ni une obligation liée à Belgium ni une facture réelle.
@@ -392,8 +457,9 @@ ORDER BY currency_code;
 
 Ne pas renommer USD en EUR. Une conversion demande une source de taux, une date
 de référence et une méthode explicitement présentée ; elle n'est pas ajoutée
-par cette extension. GCP garde les EUR de son export, les deux devises restent
-séparées et aucun total combiné ne double-compte une facture Marketplace.
+par cette extension. Databricks Marketplace est récupéré directement en EUR
+depuis Cloud Billing, pas converti depuis l'estimation. Le total Billing EUR
+exclut les USD de la référence DBU.
 
 Ce processus ajoute des requêtes BigQuery, un petit export GCS, des lectures
 Databricks, du stockage Delta et l'exécution du Job. Ne pas laisser le cluster
@@ -415,7 +481,7 @@ Configurer les notifications d'échec dans les deux interfaces avec ton email.
 - BigQuery : export sous le compte planifié réussi, Parquet + COMPLETE présents.
 - Databricks : preview puis publication réussis, assertions OK, un seul Job actif.
 - GCS : `latest.json` privé, aucun identifiant brut/credential dans les records.
-- Cloud Run : mode GCS actif, données visibles, EUR/USD séparés, périodes partial.
+- Cloud Run : mode GCS actif, total Billing EUR séparé de la référence USD, périodes partial.
 - Deuxième run : mêmes clés mensuelles, pas de lignes dupliquées ; les valeurs
   peuvent évoluer si la facturation a reçu des corrections.
 - Surveiller une première exécution réellement planifiée avant de déclarer

@@ -32,12 +32,25 @@ def _check_daily(daily_records, monthly, source_as_of):
     if daily.empty or set(daily["provider"]) != {"GCP", "Databricks"}:
         raise ValueError("Both daily cost sources are required.")
     for row in daily.to_dict("records"):
-        if date.fromisoformat(row["usage_date"]) > utc_timestamp(source_as_of[row["provider"]]).date():
+        source = 'GCP' if row['cost_basis'] == 'billing_export' else 'Databricks'
+        if date.fromisoformat(row["usage_date"]) > utc_timestamp(source_as_of[source]).date():
             raise ValueError("Usage date follows source extraction.")
     derived = monthly_from_daily(daily_records)
     if derived.sort_values(list(KEY)).to_dict("records") != monthly.sort_values(list(KEY)).to_dict("records"):
         raise ValueError("Monthly costs do not reconcile with the daily records.")
     return daily
+
+
+def _check_billing_scope(frame, *, marketplace):
+    billed = frame[frame['cost_basis'] == 'billing_export']
+    has_marketplace = 'Databricks' in set(billed['provider'])
+    if marketplace:
+        if set(billed['provider']) != {'GCP', 'Databricks'} or not (frame['cost_basis'] == 'list_estimate').any():
+            raise ValueError('Marketplace publication requires GCP services, Databricks billing and DBU estimates.')
+        if set(frame.loc[frame['cost_basis'] == 'list_estimate', 'currency']) != {'USD'}:
+            raise ValueError('Marketplace reference estimates must retain their published USD currency.')
+    elif has_marketplace:
+        raise ValueError('Marketplace billing requires snapshot version 4.')
 
 
 def build_payload(records, *, generated_at, gcp_extracted_at, daily_records=None):
@@ -52,7 +65,11 @@ def build_payload(records, *, generated_at, gcp_extracted_at, daily_records=None
             "source_as_of": sources, "records": _clean(frame, COLUMNS)}
     if daily_records is not None:
         daily = _check_daily(daily_records, frame, sources)
-        payload.update(schema_version=3, daily_records=_clean(daily, DAILY_COLUMNS))
+        marketplace = bool(((frame.provider == 'Databricks') & (frame.cost_basis == 'billing_export')).any())
+        _check_billing_scope(frame, marketplace=marketplace)
+        payload.update(schema_version=4 if marketplace else 3, daily_records=_clean(daily, DAILY_COLUMNS))
+    else:
+        _check_billing_scope(frame, marketplace=False)
     return payload
 
 
@@ -61,13 +78,13 @@ def read_payload(payload, *, remote=False, now=None, max_age_hours=48):
         raise ValueError("Expected a platform cost snapshot object.")
     version = payload.get("schema_version")
     expected = {"schema_version", "approved_for_publication", "as_of", "records"}
-    if type(version) is not int or version not in {1, 2, 3}:
+    if type(version) is not int or version not in {1, 2, 3, 4}:
         raise ValueError("Unsupported platform cost snapshot version.")
     if version >= 2:
         expected |= {"generated_at", "source_as_of"}
-    if version == 3:
+    if version >= 3:
         expected.add("daily_records")
-    if set(payload) != expected or (remote and version not in {2, 3}):
+    if set(payload) != expected or (remote and version not in {2, 3, 4}):
         raise ValueError("Unexpected snapshot fields or legacy remote snapshot.")
     if type(payload["approved_for_publication"]) is not bool:
         raise ValueError("Publication approval must be a boolean.")
@@ -90,7 +107,11 @@ def read_payload(payload, *, remote=False, now=None, max_age_hours=48):
     frame = validate_records(payload["records"])
     if version >= 2 and (frame.empty or set(frame["provider"]) != {"GCP", "Databricks"}):
         raise ValueError("Both providers are required in an automatic snapshot.")
-    if version == 3:
+    _check_billing_scope(frame, marketplace=version == 4)
+    if version == 4:
+        frame.attrs['marketplace_billing'] = True
+        frame.attrs['source_as_of'] = dict(payload['source_as_of'])
+    if version >= 3:
         daily = _check_daily(payload["daily_records"], frame, payload["source_as_of"])
         frame.attrs["daily_records"] = _clean(daily, DAILY_COLUMNS)
     return payload["as_of"], frame

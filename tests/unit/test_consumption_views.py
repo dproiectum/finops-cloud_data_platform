@@ -17,6 +17,12 @@ sys.path.insert(0, str(ROOT / 'src'))
 from finops_cloud.sql.runner import split_statements  # noqa: E402
 
 SQL = ROOT / 'platform/common/sql/consumption'
+DB_SQL = ROOT / 'platform/common/sql/monitoring/databricks'
+
+
+def sql_path(filename):
+    directory = DB_SQL if 'databricks' in filename else SQL
+    return directory / filename
 
 
 class CountIf:
@@ -49,7 +55,7 @@ def offline_sql(statement):
 
 
 def view_query(filename):
-    statement = split_statements((SQL / filename).read_text())[-1]
+    statement = split_statements(sql_path(filename).read_text())[-1]
     return offline_sql(statement.split('\nAS\n', 1)[1])
 
 
@@ -120,7 +126,7 @@ class ConsumptionViewTests(unittest.TestCase):
                  ('03_create_databricks_consumption_view.sql', 2)]
         for name, expected_count in names:
             with self.subTest(file=name):
-                statements = split_statements((SQL / name).read_text())
+                statements = split_statements(sql_path(name).read_text())
                 self.assertEqual(len(statements), expected_count)
                 for statement in statements:
                     bare = re.sub(r'--[^\n]*', '', statement).strip()
@@ -131,13 +137,13 @@ class ConsumptionViewTests(unittest.TestCase):
                     self.assertNotIn('{', bare)
         azure = (SQL / names[0][0]).read_text()
         self.assertIn('VIEW finops_prod.datamart.v_consumption_monthly', azure)
-        dbu = (SQL / names[1][0]).read_text()
+        dbu = sql_path(names[1][0]).read_text()
         self.assertIn('VIEW finops_ops.monitoring.v_databricks_consumption_monthly', dbu)
 
     def test_validators_are_read_only(self):
         for name, expected_count in [('04_validate_azure_consumption_view.sql', 3),
                                      ('05_validate_databricks_consumption_view.sql', 2)]:
-            statements = split_statements((SQL / name).read_text())
+            statements = split_statements(sql_path(name).read_text())
             self.assertEqual(len(statements), expected_count)
             for statement in statements:
                 bare = re.sub(r'--[^\n]*', '', statement).strip()
@@ -199,7 +205,7 @@ class ConsumptionViewTests(unittest.TestCase):
 
     def test_dbu_controls_pass_and_reject_wrong_or_empty_telemetry(self):
         self.dbu_fixture()
-        statement = split_statements((SQL / '05_validate_databricks_consumption_view.sql').read_text())[0]
+        statement = split_statements(sql_path('05_validate_databricks_consumption_view.sql').read_text())[0]
         self.assertEqual(self.db.execute(offline_sql(statement)).fetchall(), [(None,)])
         self.db.execute('CREATE TABLE saved_dbu AS SELECT * FROM dbu_view')
         self.db.execute('DROP VIEW dbu_view')

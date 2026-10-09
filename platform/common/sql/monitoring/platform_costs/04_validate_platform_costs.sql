@@ -11,12 +11,36 @@ SELECT assert_true(COUNT(*) = 0, 'Duplicate platform cost keys') FROM (
   GROUP BY month, provider, service, currency, cost_basis HAVING COUNT(*) > 1
 );
 
-SELECT month, provider, currency, COUNT(*) AS service_rows,
+SELECT month, provider, currency, cost_basis, COUNT(*) AS service_rows,
        SUM(cost_before_credits) AS cost_before_credits,
        SUM(credits) AS signed_credits, SUM(usage_quantity) AS net_dbu,
        MAX(collected_at) AS collected_at
 FROM finops_ops.monitoring.platform_cost_monthly
-GROUP BY month, provider, currency ORDER BY month, provider, currency;
+GROUP BY month, provider, currency, cost_basis ORDER BY month, provider, currency, cost_basis;
+
+-- Marketplace rollout: three distinct components, never billed costs + estimates.
+SELECT assert_true(COUNT(*) > 0, 'Databricks Marketplace billing is missing; update the BigQuery export')
+FROM finops_ops.monitoring.platform_cost_monthly
+WHERE provider = 'Databricks' AND cost_basis = 'billing_export';
+
+SELECT assert_true(COUNT(*) = 0, 'Mixed or invalid platform cost basis')
+FROM finops_ops.monitoring.platform_cost_monthly
+WHERE NOT coalesce((
+  (cost_basis = 'billing_export' AND provider IN ('GCP', 'Databricks')
+    AND credits IS NOT NULL AND usage_quantity IS NULL AND coalesce(usage_unit, '') = ''
+    AND (provider <> 'Databricks' OR service = 'Databricks')
+    AND (provider <> 'GCP' OR service <> 'Databricks'))
+  OR (cost_basis = 'list_estimate' AND provider = 'Databricks'
+    AND currency = 'USD' AND credits IS NULL AND usage_quantity IS NOT NULL AND usage_unit = 'DBU')
+), false);
+
+SELECT month, currency,
+       SUM(CASE WHEN provider = 'GCP' THEN cost_before_credits + credits END) AS gcp_services_net_cost,
+       SUM(CASE WHEN provider = 'Databricks' THEN cost_before_credits + credits END) AS databricks_marketplace_net_cost,
+       CASE WHEN COUNT(DISTINCT provider) = 2 THEN SUM(cost_before_credits + credits) END AS total_platform_cost
+FROM finops_ops.monitoring.platform_cost_monthly
+WHERE cost_basis = 'billing_export'
+GROUP BY month, currency ORDER BY month, currency;
 
 SELECT * FROM finops_ops.monitoring.platform_cost_collection_run
 ORDER BY finished_at DESC LIMIT 20;
@@ -51,8 +75,8 @@ WHERE NOT (monthly.cost_before_credits <=> daily.cost)
    OR NOT (monthly.usage_quantity <=> daily.dbu)
    OR NOT (monthly.collection_run_id <=> daily.run_id);
 
-SELECT provider, currency, COUNT(*) AS daily_service_rows,
+SELECT provider, currency, cost_basis, COUNT(*) AS daily_service_rows,
        MIN(usage_date) AS first_recorded_day, MAX(usage_date) AS last_recorded_day,
        MAX(collected_at) AS collected_at
 FROM finops_ops.monitoring.platform_cost_daily
-GROUP BY provider, currency;
+GROUP BY provider, currency, cost_basis;
