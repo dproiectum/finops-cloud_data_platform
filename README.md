@@ -20,8 +20,12 @@ generator and local proof of concept are separate projects.
 The second scope measures the resources used to produce the first. It has a
 separate collection workflow: it does not reload or modify the synthetic FOCUS
 history. Both scopes reuse one dashboard and common operational components.
-Platform Costs code is prepared; cloud installation and end-to-end acceptance
-remain manual. See the [documentation index](docs/README.md) for each scope.
+Platform Costs includes collection, validation, publication and Daily/Monthly/
+Yearly views. Publication, a manual Job success and validation of
+`platform_cost_daily` were confirmed by the operator. Repository code and unit
+tests alone do not establish deployed
+table availability, effective permissions or successful schedules. See the
+[documentation index](docs/README.md) for each scope.
 
 ## Architecture
 
@@ -131,8 +135,10 @@ are available; validate the serving views and deployment before treating this
 feature as operational. Azure quantities are grouped by compatible SKU and unit,
 not summed across different units. The Consumption page does not query real
 Databricks billing. Carbon emissions are not measured by this project.
-Approved GCP cost/Databricks list-cost aggregates belong to **About the Project →
-Platform Costs**; the [manual installation guide](docs/platform_costs_setup.md)
+Approved native GCP and Databricks Marketplace billing aggregates form the EUR
+platform total in **About the Project → Platform Costs**. Databricks USD
+list-cost estimates remain a separate reference, not additional invoiced cost.
+The [manual installation guide](docs/platform_costs_setup.md)
 prepares a separate scheduled monitoring workflow and private GCS serving object.
 These scripts do not deploy resources or enable schedules automatically.
 

@@ -93,7 +93,10 @@ si PROD n’est plus vide.
 Les modèles YAML prêts à copier sont enregistrés dans :
 
 - `platform/serverless/jobs/billing_full_load_by_month.yml`;
-- `platform/classic_compute/jobs/billing_full_load_by_month.yml`.
+- `platform/classic_compute/jobs/billing-dev-full_load_by_month-no_photon.yml`
+  pour le chargement DEV Classic décrit ici. Vérifier l'identifiant du cluster
+  et son réglage Photon dans le workspace : le nom du fichier ne configure pas
+  à lui seul Photon sur un cluster existant.
 
 ## 5. Vérifier et capturer le graphe
 

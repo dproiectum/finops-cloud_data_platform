@@ -1,7 +1,8 @@
 # FinOps Control Center
 
-Read-only Streamlit application for the certified `finops_prod.datamart`
-tables and the environment-aware `finops_ops.audit` history.
+Read-only Streamlit application for `finops_prod.datamart` products, scoped
+serving views and, where authorized, the environment-aware `finops_ops.audit`
+history. Approved platform-cost summaries are read separately from private GCS.
 
 ## Functional pages
 
@@ -27,11 +28,14 @@ tables and the environment-aware `finops_ops.audit` history.
   and DEV/PROD audit separation;
 - **Architecture**: end-to-end lineage, Medallion layers and certified products.
 - **About the Project** (`/about`): project overview, a guide to every page and
-  the actual technology stack. Its **Platform Costs** tab presents reviewed monthly
-  GCP costs and Databricks list-cost estimates, kept separate from the synthetic
-  Azure portfolio. The initial snapshot is empty, not zero. See
-  `platform_costs/README.md` for source export, validation and the prepared automatic
-  monitoring rollout. Platform Costs is not a separate main navigation entry.
+  the actual technology stack. Its **Platform Costs** tab offers Daily, Monthly
+  and Yearly views. Native Google Cloud costs and Databricks Marketplace charges
+  from the billing export form the EUR platform total. Databricks DBUs and USD
+  list-price estimates remain a separate reference and are never added to that
+  total. These approved aggregates are separate from the synthetic Azure
+  portfolio; unavailable data is not zero. See `platform_costs/README.md` for
+  export, validation, publication and rollout. Platform Costs is not a separate
+  main navigation entry.
 - **About Me** (`/about-me`): a short engineering profile and a clickable contact
   address. No academic status or unverified biography is added.
 
@@ -69,10 +73,17 @@ redeploy Cloud Run to apply the change; no SQL setup or pipeline rerun is needed
 
 ## Consumption rollout (no ingestion reload)
 
-First run the manual SQL files `00` through `05` in
-`platform/common/sql/consumption/` and check every assertion, not only the final
-result tables. They create ordinary views over the already available data.
+Run these three manual SQL files in `platform/common/sql/consumption/`, in order:
+
+1. `00_check_azure_consumption.sql`;
+2. `02_create_azure_consumption_view.sql`;
+3. `04_validate_azure_consumption_view.sql`.
+
+Check every assertion, not only the final result tables. They inspect existing
+data and create/validate the ordinary Azure consumption view.
 No daily/monthly Job, source Parquet or existing serving view is changed.
+The separate files in `platform/common/sql/monitoring/databricks/` are optional
+private telemetry tools, not prerequisites for the Azure page.
 
 The Consumption page reads `finops_prod.datamart.v_consumption_monthly` with the
 existing Databricks backend. The backend needs SELECT on this view and USE on
@@ -139,8 +150,8 @@ Missing months are not filled. Partial loaded date windows are marked; calendar
 date coverage alone does not certify completeness. Location comparison holds
 energy constant and must not be reported as observed migration savings.
 
-Deployment: after the ongoing PROD copy and validation have passed, push these
-application changes and rebuild/redeploy Cloud Run as usual. Do not rerun ingestion
+Deployment: validate the required PROD serving view and access scopes, then
+rebuild/redeploy Cloud Run as usual. Do not rerun ingestion
 for this calculator or change access scopes. All private Databricks DBU gates remain
 unchanged. No application/region totals for real Databricks carbon are claimed.
 
@@ -259,7 +270,8 @@ Source: https://focus.finops.org/docs/specification/v1-0/columns/cost-and-usage/
 ## Security boundary
 
 The backend identity and read-only SQL access are separate from viewer
-authorization. The public deployment still uses global synthetic datamarts.
+authorization. The `public` mode uses global synthetic datamarts; scoped modes
+use serving views with viewer predicates before aggregation.
 Local code supports `public`, local-only `demo`, opt-in public synthetic
 `portfolio_demo`, and verified `iap` modes. `portfolio_demo` adds four fixed
 profiles; it requires `FINOPS_PORTFOLIO_DATA_APPROVED=true`, blocks raw OPS reads,

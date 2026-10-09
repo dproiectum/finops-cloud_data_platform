@@ -46,3 +46,12 @@ bindings remain under `platform/serverless` or `platform/classic_compute`.
 The three private Databricks consumption SQL files moved from `consumption/` to
 `monitoring/databricks/`. Their filenames, view names and query logic are retained.
 No catalog reset or business pipeline rerun follows from this reorganization.
+
+## Documentation responsibilities
+
+Root and folder READMEs are navigation and scope summaries. Detailed operating
+steps belong to the linked guide; executable logic belongs to notebooks,
+Python modules and SQL, not copied into each README. Recovery guides are kept
+separate from routine operation. The Belgium completion plan retains migration
+milestones and outstanding evidence, not live Job status. Keeping those roles
+separate does not require moving deployed notebook or SQL paths.

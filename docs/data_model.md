@@ -18,8 +18,10 @@ Python wheel. PySpark invokes them in order without redefining business logic.
 ## Grain
 
 `fact_finops_cost_usage` contains one row per FOCUS cost or usage line received
-in a source file. `cost_usage_sk` is a deterministic SHA-256 technical key
-derived from the source file and logical row position. `billing_month` remains
+in a source file. `cost_usage_sk` is a SHA-256 technical key derived from the
+source file and a logical row number ordered by selected business fields.
+Distinct rows can tie on those fields: stable keys across replays are not
+guaranteed for such ties. `billing_month` remains
 in the fact table to support transactional replacement of one Delta month.
 
 Monthly billing is authoritative. It replaces the logical partition previously
@@ -97,10 +99,10 @@ attribute change.
 
 The current dataset provides neither `AvailabilityZone` nor a native charge
 identifier. `availability_zone` therefore uses `Unknown`, and charge IDs are
-generated deterministically. A future Data Contract version that adds these
+generated with the row-order limitation described above. A future Data Contract version that adds these
 fields will require an explicit SQL migration.
 
-## Certified datamarts
+## Analytical datamarts
 
 | Datamart | Main use |
 |---|---|
@@ -111,7 +113,7 @@ fields will require an explicit SQL migration.
 | `dm_top_resources` | Most expensive resources |
 | `dm_cost_by_charge_type` | Charge-category analysis |
 | `dm_sku_cost` | SKU and meter analysis |
-| `dm_savings_monthly` | Negotiated and commitment savings |
+| `dm_savings_monthly` | Cost-base comparisons and effective-cost components |
 | `dm_executive_summary_monthly` | Monthly executive KPIs |
 | `dm_top_resources_monthly` | Resources by month |
 | `dm_data_quality_monthly` | Silver quality indicators |
@@ -123,6 +125,11 @@ Datamarts 8, 9, and 11 read the central Silver table directly because they use
 FOCUS fields and technical metadata that are not all present in the fact table.
 Datamart 3 reads the Gold allocation view over central Silver. The remaining
 datamarts use the physical Gold model.
+
+The dashboard's Realized Savings label means `List Cost - Effective Cost`.
+It is a price-base comparison, not proof of cash savings caused by an
+optimization. Reservation and Savings Plan components sum source effective
+costs on eligible Usage rows; they are not full upfront purchase amounts.
 
 ## Execution order
 

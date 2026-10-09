@@ -4,6 +4,11 @@ Ce plan complète les procédures de reconstruction, de promotion PROD et du
 pipeline Daily. L'ingénieur applique les changements et lance les Jobs dans
 l'interface Databricks ; le dépôt fournit le code et les contrôles.
 
+Ce document conserve les jalons de migration. Son état de départ n'est pas un
+inventaire en temps réel des Jobs : les succès annoncés ensuite doivent être
+associés à leurs Job/Run IDs et au commit exécuté. Le déploiement final du
+portfolio est Cloud Run, pas une nouvelle Databricks App obligatoire.
+
 Avant une reprise après nettoyage des textes identifiants, suivre
 `docs/privacy_rebuild.md`. Cette maintenance conserve les catalogues, RAW et OPS
 et rejoue seulement les données déjà actives. Ne pas rattraper de nouveaux daily
@@ -122,9 +127,12 @@ Job.
    pour les durées, DBU et coûts Databricks au tarif catalogue.
 2. Pour Classic, ajouter les coûts des VM, disques et réseau depuis GCP Cloud
    Billing. Noter la période et le cluster ID de chaque comparaison.
-3. Vérifier que l'App Streamlit du workspace Belgium lit
-   `finops_prod.datamart` et `finops_ops.audit` ; suivre
-   `docs/databricks_streamlit_app.md` si son déploiement reste à faire.
+3. Vérifier le dashboard Cloud Run avec
+   `apps/finops_dashboard/README.md` : connexion SQL à PROD, scopes autorisés et
+   lecture du résumé Platform Costs approuvé. Suivre
+   `docs/platform_costs_setup.md` pour la collecte indépendante. Databricks Apps
+   reste une alternative documentée dans `docs/databricks_streamlit_app.md`,
+   pas un second déploiement requis.
 4. Conserver les captures des DAGs, contrôles, tables OPS, dashboard et coûts.
 
 Critère de fin : chargement historique, Daily, clôture mensuelle, surveillance
