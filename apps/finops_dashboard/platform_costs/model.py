@@ -17,6 +17,8 @@ COLUMNS = (
     "usage_quantity", "usage_unit", "cost_basis", "period_status",
 )
 KEY = ("month", "provider", "service", "currency", "cost_basis")
+DAILY_COLUMNS = ("usage_date", *COLUMNS)
+DAILY_KEY = ("usage_date", *KEY)
 
 
 def decimal_value(value, *, optional=False):
@@ -33,17 +35,26 @@ def decimal_value(value, *, optional=False):
     return number
 
 
-def validate_records(records):
-    if not isinstance(records, list) or len(records) > 10000:
-        raise ValueError("Expected a small list of monthly service aggregates.")
+def validate_records(records, *, daily=False):
+    columns = DAILY_COLUMNS if daily else COLUMNS
+    key_columns = DAILY_KEY if daily else KEY
+    if not isinstance(records, list) or len(records) > (20000 if daily else 10000):
+        raise ValueError("Expected a bounded list of service aggregates.")
     checked, seen = [], set()
     for position, row in enumerate(records, 1):
         try:
-            if not isinstance(row, dict) or set(row) != set(COLUMNS):
+            if not isinstance(row, dict) or set(row) != set(columns):
                 raise ValueError("Only the documented aggregate columns are allowed.")
             if not isinstance(row["month"], str) or not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", row["month"]):
                 raise ValueError("Month must use YYYY-MM.")
             date.fromisoformat(row["month"] + "-01")
+            if daily:
+                usage_date = row["usage_date"]
+                if not isinstance(usage_date, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", usage_date):
+                    raise ValueError("Usage date must use YYYY-MM-DD.")
+                date.fromisoformat(usage_date)
+                if usage_date[:7] != row["month"]:
+                    raise ValueError("Usage date and month disagree.")
             if row["provider"] not in {"GCP", "Databricks"}:
                 raise ValueError("Provider must be GCP or Databricks.")
             if not isinstance(row["currency"], str) or not re.fullmatch(r"[A-Z]{3}", row["currency"]):
@@ -72,14 +83,36 @@ def validate_records(records):
                 with localcontext() as context:
                     context.prec = 80
                     parsed["reported_cost"] = parsed["cost_before_credits"] + parsed["credits"]
-            key = tuple(row[column] for column in KEY)
+            key = tuple(row[column] for column in key_columns)
             if key in seen:
-                raise ValueError("Duplicate monthly service aggregate; merge sources before publishing.")
+                raise ValueError("Duplicate service aggregate; merge sources before publishing.")
             seen.add(key)
             checked.append(parsed)
         except (ValueError, TypeError, KeyError) as exc:
             raise ValueError(f"Platform cost row {position}: {exc}") from exc
-    return pd.DataFrame(checked, columns=[*COLUMNS, "reported_cost"])
+    return pd.DataFrame(checked, columns=[*columns, "reported_cost"])
+
+
+def monthly_from_daily(records):
+    """Derive monthly totals from one daily grain, preserving signed decimals."""
+    daily = validate_records(records, daily=True)
+    grouped = {}
+    with localcontext() as context:
+        context.prec = 80
+        for row in daily.to_dict("records"):
+            key = tuple(row[column] for column in KEY)
+            if key not in grouped:
+                grouped[key] = {column: row[column] for column in COLUMNS}
+                continue
+            total = grouped[key]
+            for column in ("cost_before_credits", "credits", "usage_quantity"):
+                if total[column] is None or row[column] is None:
+                    total[column] = None
+                else:
+                    total[column] += row[column]
+            if row["period_status"] == "partial":
+                total["period_status"] = "partial"
+    return validate_records(list(grouped.values()))
 
 
 def load_snapshot(path=SNAPSHOT_PATH):

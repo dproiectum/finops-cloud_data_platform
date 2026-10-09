@@ -112,12 +112,49 @@ class PlatformCostTests(unittest.TestCase):
                 validate_records([{'project_id': 'private', 'cost': '12'}])
 
     def test_chart_does_not_stack_cost_bases_or_fill_missing_months(self):
-        frame = validate_records([row(), row("Databricks", currency="EUR")])
-        figure = cost_trend(frame, "EUR")
-        self.assertEqual(figure.layout.barmode, "group")
+        frame = validate_records([row(), row("Databricks")])
+        figure = cost_trend(frame)
+        self.assertEqual(figure.data[0].type, 'bar')
+        self.assertEqual(figure.data[1].type, 'bar')
+        self.assertEqual(figure.layout.barmode, 'group')
+        self.assertNotEqual(figure.data[0].offsetgroup, figure.data[1].offsetgroup)
+        self.assertEqual(figure.data[0].alignmentgroup, figure.data[1].alignmentgroup)
+        self.assertEqual(figure.data[0].yaxis, 'y')
+        self.assertEqual(figure.data[1].yaxis, 'y2')
+        self.assertEqual(figure.layout.yaxis.title.text, 'Cost in Euro')
+        self.assertEqual(figure.layout.yaxis2.side, 'right')
+        self.assertEqual(figure.layout.yaxis2.title.text, '')
+        right_title = figure.layout.annotations[0]
+        self.assertEqual(right_title.text, 'Cost in USD')
+        self.assertEqual(right_title.textangle, 90)
+        self.assertIsNone(right_title.font.color)
+        for axis in (figure.layout.yaxis, figure.layout.yaxis2):
+            self.assertIsNone(axis.title.font.color)
+            self.assertIsNone(axis.tickfont.color)
+        self.assertEqual(figure.data[0].marker.color, '#4285F4')
+        self.assertEqual(figure.data[1].marker.color, '#FF543D')
+        self.assertEqual(figure.layout.legend.font.size, figure.layout.xaxis.title.font.size)
+        self.assertEqual(figure.layout.legend.font.size, figure.layout.yaxis.title.font.size)
+        self.assertEqual(figure.layout.legend.font.size, figure.layout.annotations[0].font.size)
+        self.assertEqual(figure.layout.yaxis2.tickformat, ',.2f')
         self.assertEqual(list(figure.data[0].x), ["2026-09"])
         self.assertIn("List Cost Estimate", figure.data[1].name)
         self.assertIn("1\u202f134,32 EUR", figure.data[0].customdata[0])
+        self.assertEqual(figure.layout.hovermode, 'closest')
+        self.assertEqual(figure.layout.hoverlabel.bgcolor, '#F8FAFC')
+        self.assertEqual(figure.layout.hoverlabel.bordercolor, '#CBD5E1')
+        self.assertEqual(figure.layout.hoverlabel.font.color, '#1F2937')
+        for trace in figure.data:
+            self.assertTrue(trace.hovertemplate.startswith('<b>%{fullData.name}</b>'))
+            self.assertTrue(trace.hovertemplate.endswith('<extra></extra>'))
+            self.assertNotIn('<extra>%{fullData.name}', trace.hovertemplate)
+        self.assertTrue(figure.data[0].name.startswith('Google Cloud (GCP)'))
+        note = next(note for note in figure.layout.annotations if note.name == 'currency_scale_note')
+        self.assertEqual(note.x, figure.layout.legend.x)
+        self.assertEqual(note.xanchor, figure.layout.legend.xanchor)
+        self.assertLess(note.y, figure.layout.legend.y)
+        self.assertEqual(note.font.size, 12)
+        self.assertIn('<i>Separate currency scales', note.text)
 
     def test_page_renders_without_costs_and_without_live_billing_access(self):
         prefix = f"import sys\nsys.path.insert(0, {str(APP)!r})\n"
@@ -126,19 +163,17 @@ class PlatformCostTests(unittest.TestCase):
         self.assertEqual(len(app.metric), 0)
         self.assertIn("not zero", app.info[0].value)
 
-    def test_currency_filters_keep_unavailable_provider_and_european_numbers(self):
+    def test_both_providers_keep_their_currencies_and_european_numbers(self):
         frame = validate_records([row(), row("Databricks")])
         prefix = f"import sys\nsys.path.insert(0, {str(APP)!r})\n"
         with patch("platform_costs.view.load_snapshot", return_value=("2026-10-07", frame)):
             app = AppTest.from_string(prefix + "from platform_costs.view import render_platform_costs\nrender_platform_costs()\n").run()
             self.assertFalse(app.exception)
             self.assertEqual(app.metric[1].value, "1\u202f134,32 EUR")
-            self.assertEqual(app.metric[3].value, "—")
-            app.selectbox(key="platform_cost_currency").select("USD").run()
-            self.assertFalse(app.exception)
-            self.assertEqual(app.metric[1].value, "—")
             self.assertEqual(app.metric[2].value, "10,12")
             self.assertEqual(app.metric[3].value, "1\u202f234,57 USD")
+            self.assertNotIn('platform_cost_currency', [select.key for select in app.selectbox])
+            self.assertFalse(any('Separate currency scales' in text.value for text in app.markdown))
             self.assertNotIn("Combined Total", [metric.label for metric in app.metric])
 
     def test_about_guide_and_stack_are_complete(self):

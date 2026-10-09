@@ -17,6 +17,17 @@ CREATE TABLE IF NOT EXISTS finops_ops.monitoring.platform_cost_monthly (
 ) USING DELTA
 COMMENT 'Latest validated full aggregate snapshot for the two platform-cost sources';
 
+CREATE TABLE IF NOT EXISTS finops_ops.monitoring.platform_cost_daily (
+  usage_date DATE NOT NULL,
+  month STRING NOT NULL, provider STRING NOT NULL, service STRING NOT NULL,
+  currency STRING NOT NULL,
+  cost_before_credits DECIMAL(38,18) NOT NULL,
+  credits DECIMAL(38,18), usage_quantity DECIMAL(38,18),
+  usage_unit STRING, cost_basis STRING NOT NULL, period_status STRING NOT NULL,
+  collection_run_id STRING NOT NULL, collected_at TIMESTAMP NOT NULL
+) USING DELTA
+COMMENT 'UTC start-day service aggregates; monthly totals derive from this grain';
+
 CREATE TABLE IF NOT EXISTS finops_ops.monitoring.platform_cost_collection_run (
   run_id STRING NOT NULL, started_at TIMESTAMP NOT NULL,
   finished_at TIMESTAMP NOT NULL, status STRING NOT NULL,

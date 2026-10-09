@@ -9,8 +9,9 @@ DECLARE extracted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP();
 DECLARE run_id STRING DEFAULT CONCAT(FORMAT_TIMESTAMP('%Y%m%dT%H%M%SZ', extracted_at, 'UTC'), '_', REPLACE(GENERATE_UUID(), '-', ''));
 DECLARE base_uri STRING DEFAULT CONCAT('gs://dtl_finops/platform_costs/extracts/gcp/', run_id, '/');
 
-CREATE TEMP TABLE monthly_cost AS
+CREATE TEMP TABLE daily_cost AS
 SELECT
+  FORMAT_TIMESTAMP('%Y-%m-%d', usage_start_time, 'UTC') AS usage_date,
   FORMAT_TIMESTAMP('%Y-%m', usage_start_time, 'UTC') AS month,
   'GCP' AS provider,
   service.description AS service,
@@ -25,23 +26,23 @@ FROM `global-repeater-355412.finops_billing.gcp_billing_export_v1_01C7B0_D31E31_
 WHERE project.id = 'global-repeater-355412'
   AND usage_start_time >= TIMESTAMP '2026-09-01 00:00:00+00'
   AND usage_start_time < extracted_at
-GROUP BY month, service, currency;
+GROUP BY usage_date, month, service, currency;
 
-ASSERT (SELECT COUNT(*) BETWEEN 1 AND 10000 FROM monthly_cost) AS 'Missing or oversized GCP aggregates';
-ASSERT (SELECT COUNTIF(cost_before_credits IS NULL OR credits IS NULL OR service IS NULL OR currency IS NULL) = 0 FROM monthly_cost) AS 'Invalid GCP aggregate';
+ASSERT (SELECT COUNT(*) BETWEEN 1 AND 10000 FROM daily_cost) AS 'Missing or oversized GCP aggregates';
+ASSERT (SELECT COUNTIF(cost_before_credits IS NULL OR credits IS NULL OR service IS NULL OR currency IS NULL) = 0 FROM daily_cost) AS 'Invalid GCP aggregate';
 
 EXECUTE IMMEDIATE FORMAT("""
   EXPORT DATA OPTIONS(uri='%sdata-*.parquet', format='PARQUET', overwrite=true)
-  AS SELECT * FROM monthly_cost
+  AS SELECT * FROM daily_cost
 """, base_uri);
 
 -- This is extraction freshness, not proof of complete billing history.
 EXECUTE IMMEDIATE FORMAT("""
   EXPORT DATA OPTIONS(uri='%scomplete-*.json', format='JSON', overwrite=true)
-  AS SELECT 1 AS schema_version, @run_id AS run_id,
+  AS SELECT 2 AS schema_version, 'daily' AS granularity, @run_id AS run_id,
     FORMAT_TIMESTAMP('%%Y-%%m-%%dT%%H:%%M:%%E6SZ', @extracted_at, 'UTC') AS extracted_at,
-    (SELECT COUNT(*) FROM monthly_cost) AS row_count, 'COMPLETE' AS status
+    (SELECT COUNT(*) FROM daily_cost) AS row_count, 'COMPLETE' AS status
 """, base_uri)
 USING run_id AS run_id, extracted_at AS extracted_at;
 
-SELECT run_id, base_uri, extracted_at, (SELECT COUNT(*) FROM monthly_cost) AS exported_rows;
+SELECT run_id, base_uri, extracted_at, (SELECT COUNT(*) FROM daily_cost) AS exported_rows;

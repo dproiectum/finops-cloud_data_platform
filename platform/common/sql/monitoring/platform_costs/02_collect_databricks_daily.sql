@@ -1,6 +1,8 @@
 -- DATABRICKS SQL. Read-only: does not create/modify any table or grant.
 -- Two project workspaces only; no workspace/job/cluster/user ID in the output.
--- Usage month follows usage_start_time, UTC. Free Genie is not priced or included.
+-- Daily grain follows usage_start_time, UTC; monthly totals derive from these rows.
+-- Intervals crossing midnight are attributed to their UTC start day, not prorated.
+-- Free Genie is not priced or included.
 -- Signed retractions/restatements stay signed; no record_type filter.
 -- Prices must cover the WHOLE usage interval; missing/ambiguous pricing yields NULL cost.
 -- Explicit decimal price arithmetic, never implicit STRING-to-DOUBLE conversion.
@@ -9,6 +11,7 @@
 -- Source: https://docs.databricks.com/gcp/en/admin/system-tables/pricing
 WITH priced_usage AS (
   SELECT
+    date_format(usage.usage_start_time, 'yyyy-MM-dd') AS usage_date,
     date_format(usage.usage_start_time, 'yyyy-MM') AS month,
     usage.sku_name AS service,
     usage.usage_quantity,
@@ -32,10 +35,12 @@ WITH priced_usage AS (
     AND usage.cloud = 'GCP'
     AND usage.usage_unit = 'DBU'
     AND usage.sku_name <> 'GENIE_FREE_USAGE'
-  GROUP BY usage.record_id, date_format(usage.usage_start_time, 'yyyy-MM'),
+  GROUP BY usage.record_id, date_format(usage.usage_start_time, 'yyyy-MM-dd'),
+           date_format(usage.usage_start_time, 'yyyy-MM'),
            usage.sku_name, usage.usage_quantity
 )
 SELECT
+  usage_date,
   month,
   'Databricks' AS provider,
   service,
@@ -48,5 +53,5 @@ SELECT
   'list_estimate' AS cost_basis,
   'partial' AS period_status
 FROM priced_usage
-GROUP BY month, service
-ORDER BY month, service;
+GROUP BY usage_date, month, service
+ORDER BY usage_date, service;

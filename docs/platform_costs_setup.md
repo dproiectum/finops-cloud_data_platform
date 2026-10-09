@@ -24,7 +24,7 @@ Organisation :
 platform/common/sql/monitoring/platform_costs/
   00_check_gcp_export.sql                 # BigQuery, lecture seule
   01_export_gcp_to_gcs.sql                # BigQuery, export sur GCS
-  02_collect_databricks_monthly.sql        # Databricks, lecture seule
+  02_collect_databricks_daily.sql          # Databricks, lecture seule
   03_create_monitoring_objects.sql        # Databricks, création additive
   04_validate_platform_costs.sql          # Databricks, contrôle après collecte
 platform/common/notebooks/monitoring/collect_platform_costs.ipynb
@@ -180,7 +180,8 @@ Dans SQL Editor, sélectionner ton SQL Warehouse et exécuter
 
 - le schéma `finops_ops.monitoring` s'il manque ;
 - le Volume externe `finops_ops.monitoring.platform_cost_files` ;
-- `platform_cost_monthly`, dernier snapshot validé des agrégats ;
+- `platform_cost_monthly`, totaux mensuels dérivés du quotidien ;
+- `platform_cost_daily`, dernier snapshot quotidien par service et devise ;
 - `platform_cost_collection_run`, historique privé des collectes.
 
 Ne pas exécuter les scripts `00_drop...` ni recréer les catalogues.
@@ -189,7 +190,7 @@ L'identité de création doit disposer des droits UC requis sur `finops_ops`,
 
 Pour le premier lancement, utiliser ton identité propriétaire. Pour un Job avec
 un principal dédié, lui accorder USE CATALOG/SCHEMA, SELECT et MODIFY sur ces
-deux tables seulement, READ VOLUME et WRITE VOLUME sur ce Volume, ainsi que la
+trois tables seulement, READ VOLUME et WRITE VOLUME sur ce Volume, ainsi que la
 lecture de `system.billing.usage` et `system.billing.list_prices` avec USE sur
 leur catalogue/schéma. Le dashboard ne reçoit **aucun** de ces nouveaux droits.
 Ne pas accorder SELECT sur tout `finops_ops` aux profils de démonstration.
@@ -236,7 +237,9 @@ réussies renvoient NULL, puis les totaux et l'historique sont affichés.
 Les deux sources sont exigées. Des prix absents, ambigus ou ne couvrant pas tout
 l'intervalle d'usage Databricks empêchent la publication. Les exports GCP doivent
 dater de moins de 48 heures. Un échec de validation n'efface pas le dernier objet.
-Delta, GCS et audit ne forment pas une transaction distribuée : une panne après
+Les deux tables Delta, GCS et audit ne forment pas une transaction distribuée :
+une panne entre les écritures des deux tables peut laisser des snapshots privés
+différents (détectés par les contrôles de totaux et de run_id). Une panne après
 la mise à jour Delta peut laisser le dashboard sur son ancien objet, et une panne
 d'audit après l'écriture GCS peut laisser un objet valide déjà publié. Corriger
 l'erreur et relancer ; le remplacement est idempotent. Ne pas fabriquer de zéro
@@ -271,8 +274,20 @@ FINOPS_PLATFORM_COSTS_MAX_AGE_HOURS=48
 Déployer la nouvelle version du code via le push/trigger Cloud Build normal,
 puis vérifier que la révision conserve ces variables. Ouvrir **About the Project
 → Platform Costs**, recharger après cinq minutes maximum pour le cache, et
-choisir EUR pour GCP / USD pour Databricks. Les données ne sont pas converties
-entre devises et ne sont pas additionnées en une facture totale.
+vérifier GCP en EUR à gauche et Databricks en USD à droite sur le même graphique.
+Le choix **View by → Daily / Monthly / Yearly** change la granularité ; Daily apparaît
+uniquement après publication des données quotidiennes. Il n'y a plus de filtre
+global de devise masquant une source. Les données ne sont pas converties entre
+devises et ne sont pas additionnées en une facture totale. Les détails de services
+restent séparés par fournisseur pour éviter un classement comparant EUR et USD.
+
+Les filtres **Year** (All Years ou une année à partir de 2025) et **Month**
+(All Months ou un mois de calendrier) sont communs aux trois vues. Un mois choisi
+avec All Years sélectionne ce mois pour chaque année. Daily peut couvrir un mois,
+une année ou toute la période publiée ; Yearly agrège les mois sélectionnés.
+Les dates absentes ne deviennent pas des coûts nuls. Proposer 2025 dans l'interface
+ne récupère pas un historique absent : les scripts de collecte actuels commencent
+au 1er septembre 2026 et cette modification graphique ne les change pas.
 
 Le mode GCS ne revient jamais au JSON embarqué en cas de panne. Pour revenir
 volontairement au mode hors ligne, définir `FINOPS_PLATFORM_COSTS_MODE=bundled` ;
@@ -282,7 +297,7 @@ le snapshot fourni reste vide, pas un exemple financier inventé.
 
 **BigQuery :** depuis le script `01_export_gcp_to_gcs.sql`, créer une Scheduled
 Query `finops-platform-costs-gcp-export`, région `EU`, tous les jours à
-**05:17 UTC**, avec le compte dédié de l'étape 3. Ne pas configurer une table
+**05:10 UTC**, avec le compte dédié de l'étape 3. Ne pas configurer une table
 de destination : le script contient son export et sa table temporaire. Vérifier
 le premier run planifié sous cette identité ; un test sous ton compte personnel
 ne prouve pas les droits du compte de service.
@@ -308,6 +323,77 @@ le notebook choisit le dernier export COMPLETE récent, pas nécessairement celu
 du même jour. Surveiller les deux historiques et les timestamps publiés.
 
 ## 9. Coût et exploitation
+
+### Mise à niveau d'une installation mensuelle existante : Daily / Monthly
+
+Cette extension ne crée aucun nouveau planning et ne touche pas aux sources
+Azure, aux catalogues métier ou aux pipelines de chargement. Le fichier SQL
+`02_collect_databricks_monthly.sql` est remplacé par
+`02_collect_databricks_daily.sql` : il reste une seule requête de prix Databricks.
+Les agrégats mensuels sont calculés à partir des jours UTC, pas additionnés à eux.
+Les périodes restent `partial`, les corrections restent signées et les dates
+sans enregistrement sont indisponibles, jamais fabriquées à zéro. Un intervalle
+d'usage qui traverse minuit est affecté à sa date de début UTC, sans prorata.
+
+Ordre de déploiement, exécuté manuellement par l'utilisateur :
+
+1. Mettre temporairement en pause le Job `finops-platform-costs-daily` pendant
+   cette mise à niveau. Ne pas supprimer le Job ni la planification BigQuery.
+2. Publier le code revu sur GitHub et attendre le build/déploiement Cloud Run.
+   Le nouveau lecteur accepte les snapshots mensuels v2 existants ainsi que les
+   snapshots quotidiens v3. Vérifier les variables GCS et conserver les IAM actuels.
+   Déployer le lecteur avant de publier un v3 : l'ancien lecteur le refuserait.
+3. Faire Pull dans le Git folder Databricks Belgium. Exécuter à nouveau
+   `03_create_monitoring_objects.sql` : les objets existants sont conservés et
+   `finops_ops.monitoring.platform_cost_daily` est créée si elle manque.
+   Si le Run as est un principal distinct, lui donner SELECT/MODIFY sur cette
+   nouvelle table comme sur la table mensuelle ; le dashboard ne reçoit rien.
+4. BigQuery → Scheduled queries → `finops-platform-costs-gcp-export` → Edit.
+   Remplacer le SQL enregistré par **tout** le nouveau `01_export_gcp_to_gcs.sql`.
+   Conserver EU, le compte d'export, les notifications et **05:10 UTC**. Le push
+   GitHub ne met pas à jour cette copie du SQL. Lancer aussi le script entier une
+   fois dans l'éditeur pour tester. Un export quotidien porte un manifeste v2,
+   `granularity=daily`, puis les fichiers Parquet et COMPLETE.
+5. Dans le notebook, redémarrer Python si des modules étaient déjà chargés et
+   exécuter toutes les cellules avec `dry_run=true`, confirmation vide.
+   Attendre `PREVIEW`, `granularity=daily`, `daily_rows>0` et les deux sources.
+   Un GCP mensuel ancien reste accepté en mode de transition, mais ne donne pas
+   la vue Daily : utiliser le nouvel export complet, sans modifier d'ancien dossier.
+6. Choisir `dry_run=false`, `confirmation=PUBLISH_PLATFORM_COSTS`, réexécuter la
+   cellule des paramètres puis la collecte. Attendre `PUBLISHED` et
+   `granularity=daily`. Les deux tables privées sont remplacées, puis le même
+   `published/latest.json` est écrit ; aucun changement d'URI, d'IAM Cloud Run
+   ou de variable d'environnement n'est requis.
+7. Exécuter `04_validate_platform_costs.sql`. Les assertions contrôlent les clés
+   quotidiennes, les dates et la réconciliation daily/monthly (montants, crédits,
+   DBU et collection_run_id). Vérifier dans le dashboard **View by → Daily**,
+   choisir le mois, puis revenir à Monthly et contrôler les totaux. Le cache
+   peut retarder l'affichage de cinq minutes.
+8. Réactiver le même Job à **08:43 Europe/Paris** ; vérifier le prochain run
+   planifié BigQuery sous son compte de service et le prochain run Databricks.
+   La collecte s'effectue dans le même Job, pas dans une seconde chaîne Azure.
+
+La limite de volume reste explicite : 10 000 lignes par source, 20 000 lignes
+quotidiennes publiées au maximum et un JSON de 4 MiB. Un dépassement échoue
+sans tronquer l'historique et sans remplacer la publication par des zéros.
+
+#### Pourquoi Databricks reste en USD
+
+Le SQL sélectionne explicitement `prices.currency_code = 'USD'` et publie un
+`list_estimate`. Ce n'est ni une obligation liée à Belgium ni une facture réelle.
+Pour vérifier les devises réellement présentes, exécuter dans Databricks :
+
+```sql
+SELECT DISTINCT currency_code
+FROM system.billing.list_prices
+WHERE cloud = 'GCP' AND usage_unit = 'DBU'
+ORDER BY currency_code;
+```
+
+Ne pas renommer USD en EUR. Une conversion demande une source de taux, une date
+de référence et une méthode explicitement présentée ; elle n'est pas ajoutée
+par cette extension. GCP garde les EUR de son export, les deux devises restent
+séparées et aucun total combiné ne double-compte une facture Marketplace.
 
 Ce processus ajoute des requêtes BigQuery, un petit export GCS, des lectures
 Databricks, du stockage Delta et l'exécution du Job. Ne pas laisser le cluster

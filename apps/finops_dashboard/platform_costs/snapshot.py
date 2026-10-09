@@ -3,7 +3,7 @@
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
-from .model import COLUMNS, validate_records
+from .model import COLUMNS, DAILY_COLUMNS, KEY, monthly_from_daily, validate_records
 
 
 def utc_timestamp(value):
@@ -22,20 +22,38 @@ def check_freshness(value, now, max_age_hours=48):
     return moment
 
 
-def build_payload(records, *, generated_at, gcp_extracted_at):
+def _clean(frame, columns):
+    return [{key: str(row[key]) if isinstance(row[key], Decimal) else row[key]
+             for key in columns} for row in frame.sort_values(list(columns[:1]) + ["provider", "service", "currency"]).to_dict("records")]
+
+
+def _check_daily(daily_records, monthly, source_as_of):
+    daily = validate_records(daily_records, daily=True)
+    if daily.empty or set(daily["provider"]) != {"GCP", "Databricks"}:
+        raise ValueError("Both daily cost sources are required.")
+    for row in daily.to_dict("records"):
+        if date.fromisoformat(row["usage_date"]) > utc_timestamp(source_as_of[row["provider"]]).date():
+            raise ValueError("Usage date follows source extraction.")
+    derived = monthly_from_daily(daily_records)
+    if derived.sort_values(list(KEY)).to_dict("records") != monthly.sort_values(list(KEY)).to_dict("records"):
+        raise ValueError("Monthly costs do not reconcile with the daily records.")
+    return daily
+
+
+def build_payload(records, *, generated_at, gcp_extracted_at, daily_records=None):
     generated = utc_timestamp(generated_at)
     check_freshness(gcp_extracted_at, generated)
     frame = validate_records(records)
     if frame.empty or set(frame["provider"]) != {"GCP", "Databricks"}:
         raise ValueError("Automatic publication requires both validated providers.")
-    clean = []
-    for row in frame.sort_values(["month", "provider", "service", "currency"]).to_dict("records"):
-        clean.append({key: str(row[key]) if isinstance(row[key], Decimal) else row[key]
-                      for key in COLUMNS})
-    return {"schema_version": 2, "approved_for_publication": True,
+    sources = {"GCP": utc_timestamp(gcp_extracted_at).isoformat(), "Databricks": generated.isoformat()}
+    payload = {"schema_version": 2, "approved_for_publication": True,
             "as_of": generated.date().isoformat(), "generated_at": generated.isoformat(),
-            "source_as_of": {"GCP": utc_timestamp(gcp_extracted_at).isoformat(),
-                             "Databricks": generated.isoformat()}, "records": clean}
+            "source_as_of": sources, "records": _clean(frame, COLUMNS)}
+    if daily_records is not None:
+        daily = _check_daily(daily_records, frame, sources)
+        payload.update(schema_version=3, daily_records=_clean(daily, DAILY_COLUMNS))
+    return payload
 
 
 def read_payload(payload, *, remote=False, now=None, max_age_hours=48):
@@ -43,11 +61,13 @@ def read_payload(payload, *, remote=False, now=None, max_age_hours=48):
         raise ValueError("Expected a platform cost snapshot object.")
     version = payload.get("schema_version")
     expected = {"schema_version", "approved_for_publication", "as_of", "records"}
-    if type(version) is not int or version not in {1, 2}:
+    if type(version) is not int or version not in {1, 2, 3}:
         raise ValueError("Unsupported platform cost snapshot version.")
-    if version == 2:
+    if version >= 2:
         expected |= {"generated_at", "source_as_of"}
-    if set(payload) != expected or (remote and version != 2):
+    if version == 3:
+        expected.add("daily_records")
+    if set(payload) != expected or (remote and version not in {2, 3}):
         raise ValueError("Unexpected snapshot fields or legacy remote snapshot.")
     if type(payload["approved_for_publication"]) is not bool:
         raise ValueError("Publication approval must be a boolean.")
@@ -56,7 +76,7 @@ def read_payload(payload, *, remote=False, now=None, max_age_hours=48):
     if not isinstance(payload["as_of"], str):
         raise ValueError("A snapshot needs an extraction date.")
     date.fromisoformat(payload["as_of"])
-    if version == 2:
+    if version >= 2:
         now = now or datetime.now(timezone.utc)
         generated = check_freshness(payload["generated_at"], now, max_age_hours)
         if payload["as_of"] != generated.date().isoformat():
@@ -68,6 +88,9 @@ def read_payload(payload, *, remote=False, now=None, max_age_hours=48):
             if utc_timestamp(timestamp) > generated + timedelta(minutes=5):
                 raise ValueError("A source timestamp cannot follow publication.")
     frame = validate_records(payload["records"])
-    if version == 2 and (frame.empty or set(frame["provider"]) != {"GCP", "Databricks"}):
+    if version >= 2 and (frame.empty or set(frame["provider"]) != {"GCP", "Databricks"}):
         raise ValueError("Both providers are required in an automatic snapshot.")
+    if version == 3:
+        daily = _check_daily(payload["daily_records"], frame, payload["source_as_of"])
+        frame.attrs["daily_records"] = _clean(daily, DAILY_COLUMNS)
     return payload["as_of"], frame

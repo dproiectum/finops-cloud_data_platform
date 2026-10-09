@@ -207,7 +207,7 @@ class CollectionTests(unittest.TestCase):
         self.assertFalse((ROOT / 'apps/finops_dashboard/project_costs').exists())
         sql = ROOT / 'platform/common/sql/monitoring/platform_costs'
         self.assertEqual(len(list(sql.glob('*.sql'))), 5)
-        self.assertNotIn('SET TIME ZONE', (sql / '02_collect_databricks_monthly.sql').read_text())
+        self.assertNotIn('SET TIME ZONE', (sql / '02_collect_databricks_daily.sql').read_text())
         export = (sql / '01_export_gcp_to_gcs.sql').read_text()
         self.assertLess(export.index('data-*.parquet'), export.index('complete-*.json'))
         self.assertIn('GENERATE_UUID()', export)
